@@ -175,6 +175,13 @@ def internet_search(
     return search_docs
 
 
+# Track file operations for debugging
+def track_file_operation(operation: str, filename: str):
+    """Log file operations for debugging"""
+    tracker.file_operations.append({"operation": operation, "file": filename})
+    console.print(f"[bold green]📝 File {operation}:[/bold green] {filename}")
+
+
 sub_research_prompt = """You are a dedicated researcher. Your job is to conduct research based on the users questions.
 
 Conduct thorough research and then reply to the user with a detailed answer to their question
@@ -244,12 +251,18 @@ The first thing you should do after planning is to write the original user quest
 
 Use the research-agent to conduct deep research. It will respond to your questions/topics with a detailed answer.
 
-When you think you enough information to write a final report, write it to `final_report.md`
+CRITICAL REQUIREMENT - FINAL REPORT:
+You MUST ALWAYS write a final report to `final_report.md` before you finish. This is NOT optional!
+Even if you hit time or recursion limits, you must write SOMETHING to final_report.md with whatever research you've gathered so far.
+
+When you have gathered enough information, write it to `final_report.md`
 
 You can call the critique-agent to get a critique of the final report. After that (if needed) you can do more research and edit the `final_report.md`
 You can do this however many times you want until are you satisfied with the result.
 
 Only edit the file once at a time (if you call this tool in parallel, there may be conflicts).
+
+REMINDER: Before you finish your work, you MUST have created final_report.md. Do not mark your work as complete until this file exists!
 
 Here are instructions for writing the final report:
 
@@ -340,6 +353,9 @@ def run_research(question: str, recursion_limit: int = 100):
 
     # Start timing
     start_time = time.time()
+
+    # Track existing files before starting
+    existing_files = set(os.listdir('.'))
 
     # Enhance question with planning reminder for better TODO structure
     enhanced_question = f"""{question}
@@ -446,6 +462,14 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
         console.print(Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green"))
 
+        # Show newly created files
+        new_files = set(os.listdir('.')) - existing_files
+        if new_files:
+            console.print("\n[bold]Nieuwe files aangemaakt:[/bold]")
+            for file in sorted(new_files):
+                if not file.startswith('.'):  # Skip hidden files
+                    console.print(f"  • [green]{file}[/green]")
+
         # Check if final report was created
         if os.path.exists("final_report.md"):
             console.print("\n[bold green]✓ Rapport opgeslagen in:[/bold green] [link=file://final_report.md]final_report.md[/link]")
@@ -461,6 +485,13 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     title="[bold cyan]📄 Rapport Preview[/bold cyan]",
                     border_style="cyan"
                 ))
+        else:
+            console.print("\n[bold red]⚠️  WAARSCHUWING: Geen final_report.md gevonden![/bold red]")
+            console.print("[yellow]De agent heeft het onderzoek gedaan maar geen rapport geschreven.[/yellow]")
+            console.print("[yellow]Dit kan betekenen:[/yellow]")
+            console.print("  [dim]• Recursion limit bereikt voordat rapport werd geschreven[/dim]")
+            console.print("  [dim]• Agent heeft file write permission issues[/dim]")
+            console.print("  [dim]• Bug in agent logic - TODOs gemarkeerd als complete zonder daadwerkelijk werk[/dim]")
 
         return result
 

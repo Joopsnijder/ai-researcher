@@ -175,6 +175,13 @@ def internet_search(
     return search_docs
 
 
+# Track file operations for debugging
+def track_file_operation(operation: str, filename: str):
+    """Log file operations for debugging"""
+    tracker.file_operations.append({"operation": operation, "file": filename})
+    console.print(f"[bold green]📝 File {operation}:[/bold green] {filename}")
+
+
 sub_research_prompt = """You are a dedicated researcher. Your job is to conduct research based on the users questions.
 
 Conduct thorough research and then reply to the user with a detailed answer to their question
@@ -220,16 +227,42 @@ critique_sub_agent = {
 # Prompt prefix to steer the agent to be an expert researcher
 research_instructions = """You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
-The first thing you should do is to write the original user question to `question.txt` so you have a record of it.
+PLANNING APPROACH:
+At the very start of each research task, IMMEDIATELY use the write_todos tool to create a structured plan. Break down the research into clear, actionable steps:
+
+1. Analyze the research question and identify 3-5 key subtopics or research areas
+2. Create a TODO for each research area (use research-agent for each)
+3. Add a TODO for compiling findings into initial report
+4. Add a TODO for critique and verification (use critique-agent)
+5. Add a TODO for addressing critique feedback and finalizing report
+6. Note what language the final report should be written in
+
+Example TODO structure for "What are the latest advancements in Explainable AI?":
+[ ] Research XAI interpretability techniques (2025)
+[ ] Research XAI evaluation metrics and benchmarks
+[ ] Research XAI application domains and case studies
+[ ] Compile initial report with all findings
+[ ] Critique report for completeness and accuracy
+[ ] Address feedback and finalize report in English
+
+This planning ensures thorough coverage and helps track progress throughout the research process.
+
+The first thing you should do after planning is to write the original user question to `question.txt` so you have a record of it.
 
 Use the research-agent to conduct deep research. It will respond to your questions/topics with a detailed answer.
 
-When you think you enough information to write a final report, write it to `final_report.md`
+CRITICAL REQUIREMENT - FINAL REPORT:
+You MUST ALWAYS write a final report to `final_report.md` before you finish. This is NOT optional!
+Even if you hit time or recursion limits, you must write SOMETHING to final_report.md with whatever research you've gathered so far.
+
+When you have gathered enough information, write it to `final_report.md`
 
 You can call the critique-agent to get a critique of the final report. After that (if needed) you can do more research and edit the `final_report.md`
 You can do this however many times you want until are you satisfied with the result.
 
 Only edit the file once at a time (if you call this tool in parallel, there may be conflicts).
+
+REMINDER: Before you finish your work, you MUST have created final_report.md. Do not mark your work as complete until this file exists!
 
 Here are instructions for writing the final report:
 
@@ -321,6 +354,14 @@ def run_research(question: str, recursion_limit: int = 100):
     # Start timing
     start_time = time.time()
 
+    # Track existing files before starting
+    existing_files = set(os.listdir('.'))
+
+    # Enhance question with planning reminder for better TODO structure
+    enhanced_question = f"""{question}
+
+Remember to start by creating a detailed TODO plan using write_todos before beginning research."""
+
     # Print header
     console.print("\n")
     console.print(Panel.fit(
@@ -335,7 +376,7 @@ def run_research(question: str, recursion_limit: int = 100):
         # Stream the agent's work with recursion limit
         # This prevents infinite loops by limiting the number of agent iterations
         for event in agent.stream(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": [{"role": "user", "content": enhanced_question}]},
             {"recursion_limit": recursion_limit},  # Maximum number of agent steps
             stream_mode="updates"
         ):
@@ -383,7 +424,7 @@ def run_research(question: str, recursion_limit: int = 100):
 
         # Get final result (with same recursion limit)
         result = agent.invoke(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": [{"role": "user", "content": enhanced_question}]},
             {"recursion_limit": recursion_limit}
         )
 
@@ -421,6 +462,14 @@ def run_research(question: str, recursion_limit: int = 100):
 
         console.print(Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green"))
 
+        # Show newly created files
+        new_files = set(os.listdir('.')) - existing_files
+        if new_files:
+            console.print("\n[bold]Nieuwe files aangemaakt:[/bold]")
+            for file in sorted(new_files):
+                if not file.startswith('.'):  # Skip hidden files
+                    console.print(f"  • [green]{file}[/green]")
+
         # Check if final report was created
         if os.path.exists("final_report.md"):
             console.print("\n[bold green]✓ Rapport opgeslagen in:[/bold green] [link=file://final_report.md]final_report.md[/link]")
@@ -436,6 +485,13 @@ def run_research(question: str, recursion_limit: int = 100):
                     title="[bold cyan]📄 Rapport Preview[/bold cyan]",
                     border_style="cyan"
                 ))
+        else:
+            console.print("\n[bold red]⚠️  WAARSCHUWING: Geen final_report.md gevonden![/bold red]")
+            console.print("[yellow]De agent heeft het onderzoek gedaan maar geen rapport geschreven.[/yellow]")
+            console.print("[yellow]Dit kan betekenen:[/yellow]")
+            console.print("  [dim]• Recursion limit bereikt voordat rapport werd geschreven[/dim]")
+            console.print("  [dim]• Agent heeft file write permission issues[/dim]")
+            console.print("  [dim]• Bug in agent logic - TODOs gemarkeerd als complete zonder daadwerkelijk werk[/dim]")
 
         return result
 

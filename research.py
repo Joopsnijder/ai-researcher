@@ -220,7 +220,27 @@ critique_sub_agent = {
 # Prompt prefix to steer the agent to be an expert researcher
 research_instructions = """You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
-The first thing you should do is to write the original user question to `question.txt` so you have a record of it.
+PLANNING APPROACH:
+At the very start of each research task, IMMEDIATELY use the write_todos tool to create a structured plan. Break down the research into clear, actionable steps:
+
+1. Analyze the research question and identify 3-5 key subtopics or research areas
+2. Create a TODO for each research area (use research-agent for each)
+3. Add a TODO for compiling findings into initial report
+4. Add a TODO for critique and verification (use critique-agent)
+5. Add a TODO for addressing critique feedback and finalizing report
+6. Note what language the final report should be written in
+
+Example TODO structure for "What are the latest advancements in Explainable AI?":
+[ ] Research XAI interpretability techniques (2025)
+[ ] Research XAI evaluation metrics and benchmarks
+[ ] Research XAI application domains and case studies
+[ ] Compile initial report with all findings
+[ ] Critique report for completeness and accuracy
+[ ] Address feedback and finalize report in English
+
+This planning ensures thorough coverage and helps track progress throughout the research process.
+
+The first thing you should do after planning is to write the original user question to `question.txt` so you have a record of it.
 
 Use the research-agent to conduct deep research. It will respond to your questions/topics with a detailed answer.
 
@@ -321,6 +341,11 @@ def run_research(question: str, recursion_limit: int = 100):
     # Start timing
     start_time = time.time()
 
+    # Enhance question with planning reminder for better TODO structure
+    enhanced_question = f"""{question}
+
+Remember to start by creating a detailed TODO plan using write_todos before beginning research."""
+
     # Print header
     console.print("\n")
     console.print(Panel.fit(
@@ -335,7 +360,7 @@ def run_research(question: str, recursion_limit: int = 100):
         # Stream the agent's work with recursion limit
         # This prevents infinite loops by limiting the number of agent iterations
         for event in agent.stream(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": [{"role": "user", "content": enhanced_question}]},
             {"recursion_limit": recursion_limit},  # Maximum number of agent steps
             stream_mode="updates"
         ):
@@ -383,7 +408,7 @@ def run_research(question: str, recursion_limit: int = 100):
 
         # Get final result (with same recursion limit)
         result = agent.invoke(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": [{"role": "user", "content": enhanced_question}]},
             {"recursion_limit": recursion_limit}
         )
 

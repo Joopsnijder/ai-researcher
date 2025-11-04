@@ -922,36 +922,43 @@ if __name__ == "__main__":
 
         console.print(f"[dim]Recursion limit: {recursion_limit}[/dim]\n")
 
-    # Provider selection
-    console.print("[bold]Kies een search provider:[/bold]\n")
-    console.print("  [cyan]1.[/cyan] Tavily          [dim](betaald, hoogste kwaliteit, AI-optimized)[/dim]")
-    console.print("  [cyan]2.[/cyan] Multi-Search   [dim](gratis tier, auto-fallback, meerdere providers)[/dim]")
-    console.print("  [cyan]3.[/cyan] Auto           [dim](slim kiezen: Multi-Search eerst, Tavily als fallback)[/dim]")
+    # Provider selection (only for Deep Research mode)
+    if is_quick_mode:
+        # Quick mode: automatically use Multi-Search (free tier, good enough for quick queries)
+        selected_provider = "multi-search"
+        search_tool = HybridSearchTool(provider=selected_provider)
+        console.print("[dim]Using Multi-Search API (gratis tier) for quick research[/dim]\n")
+    else:
+        # Deep mode: let user choose provider
+        console.print("[bold]Kies een search provider:[/bold]\n")
+        console.print("  [cyan]1.[/cyan] Tavily          [dim](betaald, hoogste kwaliteit, AI-optimized)[/dim]")
+        console.print("  [cyan]2.[/cyan] Multi-Search   [dim](gratis tier, auto-fallback, meerdere providers)[/dim]")
+        console.print("  [cyan]3.[/cyan] Auto           [dim](slim kiezen: Multi-Search eerst, Tavily als fallback)[/dim]")
 
-    provider_choice = Prompt.ask(
-        "\n[bold cyan]Provider[/bold cyan]",
-        choices=["1", "2", "3"],
-        default="2"
-    )
+        provider_choice = Prompt.ask(
+            "\n[bold cyan]Provider[/bold cyan]",
+            choices=["1", "2", "3"],
+            default="2"
+        )
 
-    # Map choice to provider
-    provider_map = {
-        "1": "tavily",
-        "2": "multi-search",
-        "3": "auto"
-    }
-    selected_provider = provider_map[provider_choice]
+        # Map choice to provider
+        provider_map = {
+            "1": "tavily",
+            "2": "multi-search",
+            "3": "auto"
+        }
+        selected_provider = provider_map[provider_choice]
 
-    # Initialize search tool with selected provider
-    search_tool = HybridSearchTool(provider=selected_provider)
+        # Initialize search tool with selected provider
+        search_tool = HybridSearchTool(provider=selected_provider)
 
-    # Show confirmation
-    provider_names = {
-        "tavily": "Tavily",
-        "multi-search": "Multi-Search API (gratis tier)",
-        "auto": "Auto (hybrid modus)"
-    }
-    console.print(f"\n[green]✓[/green] {provider_names[selected_provider]} geactiveerd\n")
+        # Show confirmation
+        provider_names = {
+            "tavily": "Tavily",
+            "multi-search": "Multi-Search API (gratis tier)",
+            "auto": "Auto (hybrid modus)"
+        }
+        console.print(f"\n[green]✓[/green] {provider_names[selected_provider]} geactiveerd\n")
 
     # Get question from user
     question = Prompt.ask(

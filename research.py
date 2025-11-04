@@ -175,6 +175,18 @@ def internet_search(
     return search_docs
 
 
+def write_file(filename: str, content: str):
+    """Write content to a file (for Quick Research mode)"""
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(content)
+        console.print(f"[bold green]✍️  Wrote file:[/bold green] {filename}")
+        return f"Successfully wrote {len(content)} characters to {filename}"
+    except Exception as e:
+        console.print(f"[bold red]❌ Error writing {filename}:[/bold red] {e}")
+        return f"Error: {e}"
+
+
 # Track file operations for debugging
 def track_file_operation(operation: str, filename: str):
     """Log file operations for debugging"""
@@ -627,7 +639,7 @@ def run_quick_research(question: str, max_searches: int = 5):
         )
 
         # Define available tools for the model
-        tools = [internet_search]
+        tools = [internet_search, write_file]
         model_with_tools = model.bind_tools(tools)
 
         # Create initial message with system prompt and question
@@ -667,11 +679,21 @@ def run_quick_research(question: str, max_searches: int = 5):
                             "content": str(result),
                             "tool_call_id": tool_call['id']
                         })
+                    elif tool_name == 'write_file':
+                        # Execute file write
+                        result = write_file(**tool_input)
+
+                        # Add tool result to conversation
+                        messages.append({
+                            "role": "tool",
+                            "content": str(result),
+                            "tool_call_id": tool_call['id']
+                        })
                     else:
                         # Search limit reached or unknown tool
                         messages.append({
                             "role": "tool",
-                            "content": "Search limit reached" if searches_performed >= max_searches else "Tool not available",
+                            "content": "Search limit reached" if tool_name == 'internet_search' else "Tool not available",
                             "tool_call_id": tool_call['id']
                         })
             else:

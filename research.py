@@ -224,6 +224,71 @@ critique_sub_agent = {
 }
 
 
+# ══════════════════════════════════════════════════════════════
+# QUICK RESEARCH MODE (Direct LLM, No Agents)
+# Fast research for simple questions without agentic overhead
+# ══════════════════════════════════════════════════════════════
+
+quick_research_prompt = """You are an expert researcher conducting QUICK, efficient research.
+
+Your task is to gather information and write a comprehensive report DIRECTLY.
+This is NOT deep research with agents - work efficiently and write the report yourself.
+
+WORKFLOW:
+1. Analyze the research question carefully
+2. Generate 3-5 targeted search queries to gather information
+3. Use the internet_search tool to execute searches
+4. Review and synthesize the search results
+5. Write a comprehensive report to `final_report.md` using write_file tool
+
+SEARCH STRATEGY:
+- Generate diverse queries covering different aspects
+- Focus on authoritative, recent sources
+- Use specific terminology related to the topic
+- Cover multiple angles (technical, practical, historical, future)
+
+REPORT REQUIREMENTS:
+- Write directly to `final_report.md` (don't just describe it!)
+- Use clear markdown formatting
+- Include an overview, key findings, and conclusion
+- Cite sources with URLs in a Sources section
+- Match the language of the question (English question → English report)
+
+REPORT STRUCTURE:
+# [Clear Title Based on Question]
+
+## Overview
+[2-3 paragraph introduction setting context]
+
+## Key Findings
+[Well-organized sections with subheadings covering main aspects]
+[Each finding should reference sources]
+
+## Recent Developments (if applicable)
+[Latest updates, trends, or changes]
+
+## Conclusion
+[Summary of main points and implications]
+
+## Sources
+1. [Title](URL)
+2. [Title](URL)
+...
+
+IMPORTANT:
+- Be thorough but efficient - this is quick research (target: 3-5 searches)
+- Synthesize information clearly and concisely
+- MUST write to final_report.md using write_file tool
+- Include proper citations
+- Focus on accuracy and relevance
+"""
+
+
+# ══════════════════════════════════════════════════════════════
+# DEEP RESEARCH MODE (Agentic with Sub-agents)
+# Thorough research with planning, parallel agents, and critique
+# ══════════════════════════════════════════════════════════════
+
 # Prompt prefix to steer the agent to be an expert researcher
 research_instructions = """You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
@@ -461,6 +526,171 @@ def ensure_report_exists(question, result, partial=False):
         console.print("[dim]  (Note: Limited research content was available)[/dim]")
 
 
+# ══════════════════════════════════════════════════════════════
+# QUICK RESEARCH IMPLEMENTATION
+# ══════════════════════════════════════════════════════════════
+
+def run_quick_research(question: str, max_searches: int = 5):
+    """
+    Quick research using direct LLM calls (no agentic overhead)
+
+    This mode is faster and cheaper than deep research:
+    - No agents, no sub-agents, no planning overhead
+    - Direct LLM interaction with search tools
+    - Suitable for simple questions, facts, overviews
+    - Completes in 1-3 minutes vs 10-30 minutes for deep research
+
+    Args:
+        question: The research question
+        max_searches: Maximum number of web searches (default: 5)
+    """
+    from langchain_anthropic import ChatAnthropic
+
+    # Start timing
+    start_time = time.time()
+
+    # Track existing files before starting
+    existing_files = set(os.listdir('.'))
+
+    # Print header
+    console.print("\n")
+    console.print(Panel.fit(
+        f"[bold white]{question}[/bold white]",
+        title="[bold cyan]🚀 AI Quick Research[/bold cyan]",
+        border_style="cyan"
+    ))
+
+    console.print("\n[yellow]Starting quick research (direct LLM mode)...[/yellow]\n")
+
+    try:
+        # Initialize Claude model
+        model = ChatAnthropic(
+            model_name="claude-sonnet-4-5-20250929",
+            max_tokens=8000,
+        )
+
+        # Define available tools for the model
+        tools = [internet_search]
+        model_with_tools = model.bind_tools(tools)
+
+        # Create initial message with system prompt and question
+        messages = [
+            {"role": "system", "content": quick_research_prompt},
+            {"role": "user", "content": question}
+        ]
+
+        console.print("[dim]💭 Analyzing question and planning research...[/dim]\n")
+
+        # Interaction loop with tool calling
+        searches_performed = 0
+        max_iterations = 20  # Safety limit
+
+        for iteration in range(max_iterations):
+            # Call model
+            response = model_with_tools.invoke(messages)
+
+            # Add response to conversation
+            messages.append({"role": "assistant", "content": response.content, "tool_calls": response.tool_calls if hasattr(response, 'tool_calls') else []})
+
+            # Check if model wants to use tools
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                # Execute tool calls
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call['name']
+                    tool_input = tool_call['args']
+
+                    if tool_name == 'internet_search' and searches_performed < max_searches:
+                        # Execute search
+                        result = internet_search(**tool_input)
+                        searches_performed += 1
+
+                        # Add tool result to conversation
+                        messages.append({
+                            "role": "tool",
+                            "content": str(result),
+                            "tool_call_id": tool_call['id']
+                        })
+                    else:
+                        # Search limit reached or unknown tool
+                        messages.append({
+                            "role": "tool",
+                            "content": "Search limit reached" if searches_performed >= max_searches else "Tool not available",
+                            "tool_call_id": tool_call['id']
+                        })
+            else:
+                # No more tool calls - model is done
+                console.print("\n[dim]📝 Finalizing research and creating report...[/dim]\n")
+                break
+
+        # Calculate duration
+        end_time = time.time()
+        duration_seconds = end_time - start_time
+
+        # Format duration
+        minutes, seconds = divmod(int(duration_seconds), 60)
+        duration_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+
+        # Create a mock result for ensure_report_exists
+        mock_result = {"messages": messages}
+
+        # DETERMINISTIC GUARANTEE: Ensure report exists
+        ensure_report_exists(question, mock_result, partial=False)
+
+        # Print summary
+        console.print("\n")
+        console.print(Rule("[bold green]Klaar![/bold green]"))
+
+        stats_table = Table(show_header=False, box=None, padding=(0, 2))
+        stats_table.add_column("Metric", style="cyan")
+        stats_table.add_column("Value", style="yellow")
+
+        stats_table.add_row("⏱️  Duur", duration_str)
+        stats_table.add_row("🔍 Aantal zoekopdrachten", str(searches_performed))
+        stats_table.add_row("💬 LLM interactions", str(len([m for m in messages if m.get('role') == 'assistant'])))
+        stats_table.add_row("🚀 Mode", "Quick Research (Direct LLM)")
+
+        console.print(Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green"))
+
+        # Show newly created files
+        new_files = set(os.listdir('.')) - existing_files
+        if new_files:
+            console.print("\n[bold]Nieuwe files aangemaakt:[/bold]")
+            for file in sorted(new_files):
+                if not file.startswith('.'):
+                    console.print(f"  • [green]{file}[/green]")
+
+        # Show report preview
+        if os.path.exists("final_report.md"):
+            console.print("\n[bold green]✓ Rapport opgeslagen in:[/bold green] [link=file://final_report.md]final_report.md[/link]")
+
+            with open("final_report.md", "r") as f:
+                content = f.read()
+                preview = content[:500] + "\n\n[dim]...(zie final_report.md voor volledig rapport)[/dim]" if len(content) > 500 else content
+
+                console.print("\n")
+                console.print(Panel(
+                    Markdown(preview),
+                    title="[bold cyan]📄 Rapport Preview[/bold cyan]",
+                    border_style="cyan"
+                ))
+
+        return {"messages": messages, "searches": searches_performed}
+
+    except KeyboardInterrupt:
+        console.print("\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]")
+        ensure_report_exists(question, None, partial=True)
+        return None
+
+    except Exception as e:
+        console.print(f"\n\n[bold red]❌ Fout opgetreden:[/bold red] {str(e)}")
+        ensure_report_exists(question, None, partial=True)
+        raise
+
+
+# ══════════════════════════════════════════════════════════════
+# DEEP RESEARCH IMPLEMENTATION (Agentic)
+# ══════════════════════════════════════════════════════════════
+
 def run_research(question: str, recursion_limit: int = 100):
     """Run the research agent with rich UI"""
 
@@ -641,35 +871,56 @@ if __name__ == "__main__":
     console.print("\n")
     console.print(Panel.fit(
         "[bold cyan]AI Research Agent[/bold cyan]\n"
-        "[dim]Powered by DeepAgents[/dim]",
+        "[dim]Powered by Claude & DeepAgents[/dim]",
         border_style="cyan",
         padding=(1, 2)
     ))
 
-    console.print("\n[bold yellow]Welkom![/bold yellow] Deze AI research agent kan diepgaand onderzoek doen naar je vraag.\n")
+    console.print("\n[bold yellow]Welkom![/bold yellow] Deze AI research agent kan onderzoek doen naar je vraag.\n")
 
-    # Recursion limit configuration
-    console.print("[bold]Agent configuratie:[/bold]")
-    console.print("[dim]Let op: Het recursion limit wordt gedeeld tussen de hoofd-agent en sub-agents.[/dim]")
-    console.print("[dim]Voor complexe onderzoeken zijn vaak 150-300 iteraties nodig.[/dim]\n")
+    # Research Mode Selection
+    console.print("[bold]Kies een research mode:[/bold]\n")
+    console.print("  [cyan]1.[/cyan] Quick Research   [dim](1-3 min, direct LLM, 3-5 searches)[/dim]")
+    console.print("                      [dim]→ Geschikt voor: feiten, overzichten, snelle antwoorden[/dim]")
+    console.print("  [cyan]2.[/cyan] Deep Research    [dim](10-30 min, agentic, 50-200 searches)[/dim]")
+    console.print("                      [dim]→ Geschikt voor: complexe analyses, diepgaand onderzoek[/dim]")
 
-    recursion_limit_choice = Prompt.ask(
-        "[cyan]Maximaal aantal agent iteraties[/cyan] [dim](voorkomt oneindige loops)[/dim]",
-        default="200"
+    mode_choice = Prompt.ask(
+        "\n[bold cyan]Research mode[/bold cyan]",
+        choices=["1", "2"],
+        default="1"
     )
-    try:
-        recursion_limit = int(recursion_limit_choice)
-        if recursion_limit < 50:
-            console.print("[yellow]⚠️  Minimum 50 iteraties aanbevolen voor sub-agents. Instellen op 50.[/yellow]")
-            recursion_limit = 50
-        elif recursion_limit > 500:
-            console.print("[yellow]Maximum 500 iteraties ingesteld[/yellow]")
-            recursion_limit = 500
-    except ValueError:
-        console.print("[yellow]Ongeldige invoer, gebruik standaard (200)[/yellow]")
-        recursion_limit = 200
 
-    console.print(f"[dim]Recursion limit: {recursion_limit}[/dim]\n")
+    is_quick_mode = mode_choice == "1"
+
+    if is_quick_mode:
+        console.print("\n[green]✓[/green] Quick Research mode geselecteerd (snel & efficiënt)\n")
+    else:
+        console.print("\n[green]✓[/green] Deep Research mode geselecteerd (diepgaand & grondig)\n")
+
+    # Recursion limit configuration (only for deep research)
+    if not is_quick_mode:
+        console.print("[bold]Agent configuratie:[/bold]")
+        console.print("[dim]Let op: Het recursion limit wordt gedeeld tussen de hoofd-agent en sub-agents.[/dim]")
+        console.print("[dim]Voor complexe onderzoeken zijn vaak 150-300 iteraties nodig.[/dim]\n")
+
+        recursion_limit_choice = Prompt.ask(
+            "[cyan]Maximaal aantal agent iteraties[/cyan] [dim](voorkomt oneindige loops)[/dim]",
+            default="200"
+        )
+        try:
+            recursion_limit = int(recursion_limit_choice)
+            if recursion_limit < 50:
+                console.print("[yellow]⚠️  Minimum 50 iteraties aanbevolen voor sub-agents. Instellen op 50.[/yellow]")
+                recursion_limit = 50
+            elif recursion_limit > 500:
+                console.print("[yellow]Maximum 500 iteraties ingesteld[/yellow]")
+                recursion_limit = 500
+        except ValueError:
+            console.print("[yellow]Ongeldige invoer, gebruik standaard (200)[/yellow]")
+            recursion_limit = 200
+
+        console.print(f"[dim]Recursion limit: {recursion_limit}[/dim]\n")
 
     # Provider selection
     console.print("[bold]Kies een search provider:[/bold]\n")
@@ -710,8 +961,12 @@ if __name__ == "__main__":
 
     # Confirm before starting
     console.print(f"\n[dim]Je vraag: {question}[/dim]")
+    console.print(f"[dim]Mode: {'Quick Research' if is_quick_mode else 'Deep Research'}[/dim]")
 
     if Prompt.ask("\n[bold]Start onderzoek?[/bold]", choices=["ja", "nee"], default="ja") == "ja":
-        run_research(question, recursion_limit=recursion_limit)
+        if is_quick_mode:
+            run_quick_research(question, max_searches=5)
+        else:
+            run_research(question, recursion_limit=recursion_limit)
     else:
         console.print("\n[yellow]Onderzoek geannuleerd.[/yellow]\n")

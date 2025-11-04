@@ -526,6 +526,63 @@ def ensure_report_exists(question, result, partial=False):
         console.print("[dim]  (Note: Limited research content was available)[/dim]")
 
 
+def generate_report_filename(question: str) -> str:
+    """
+    Generate a safe filename based on the question
+
+    Args:
+        question: The research question
+
+    Returns:
+        str: Safe filename like "what-is-quantum-computing.md"
+    """
+    import re
+
+    # Take first 50 chars of question
+    safe_question = question[:50]
+
+    # Remove special characters and convert to lowercase
+    safe_question = re.sub(r'[^\w\s-]', '', safe_question)
+    safe_question = re.sub(r'[-\s]+', '-', safe_question)
+    safe_question = safe_question.strip('-').lower()
+
+    # Ensure it's not empty
+    if not safe_question:
+        safe_question = "research-report"
+
+    return f"{safe_question}.md"
+
+
+def rename_final_report(question: str) -> str:
+    """
+    Rename final_report.md to a question-based filename
+
+    Args:
+        question: The research question
+
+    Returns:
+        str: The new filename, or None if rename failed
+    """
+    if not os.path.exists("final_report.md"):
+        return None
+
+    new_filename = generate_report_filename(question)
+
+    # If file already exists, add a number
+    base_name = new_filename[:-3]  # Remove .md
+    counter = 1
+    while os.path.exists(new_filename):
+        new_filename = f"{base_name}-{counter}.md"
+        counter += 1
+
+    try:
+        os.rename("final_report.md", new_filename)
+        return new_filename
+    except Exception as e:
+        console.print(f"[yellow]⚠️  Could not rename report: {e}[/yellow]")
+        return "final_report.md"
+
+
 # ══════════════════════════════════════════════════════════════
 # QUICK RESEARCH IMPLEMENTATION
 # ══════════════════════════════════════════════════════════════
@@ -659,13 +716,16 @@ def run_quick_research(question: str, max_searches: int = 5):
                 if not file.startswith('.'):
                     console.print(f"  • [green]{file}[/green]")
 
-        # Show report preview
-        if os.path.exists("final_report.md"):
-            console.print("\n[bold green]✓ Rapport opgeslagen in:[/bold green] [link=file://final_report.md]final_report.md[/link]")
+        # Rename report to question-based filename
+        final_filename = rename_final_report(question)
 
-            with open("final_report.md", "r") as f:
+        # Show report preview
+        if final_filename and os.path.exists(final_filename):
+            console.print(f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]")
+
+            with open(final_filename, "r") as f:
                 content = f.read()
-                preview = content[:500] + "\n\n[dim]...(zie final_report.md voor volledig rapport)[/dim]" if len(content) > 500 else content
+                preview = content[:500] + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]" if len(content) > 500 else content
 
                 console.print("\n")
                 console.print(Panel(
@@ -674,16 +734,22 @@ def run_quick_research(question: str, max_searches: int = 5):
                     border_style="cyan"
                 ))
 
-        return {"messages": messages, "searches": searches_performed}
+        return {"messages": messages, "searches": searches_performed, "report_file": final_filename}
 
     except KeyboardInterrupt:
         console.print("\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]")
         ensure_report_exists(question, None, partial=True)
+        final_filename = rename_final_report(question)
+        if final_filename:
+            console.print(f"[dim]Partial report saved as: {final_filename}[/dim]")
         return None
 
     except Exception as e:
         console.print(f"\n\n[bold red]❌ Fout opgetreden:[/bold red] {str(e)}")
         ensure_report_exists(question, None, partial=True)
+        final_filename = rename_final_report(question)
+        if final_filename:
+            console.print(f"[dim]Partial report saved as: {final_filename}[/dim]")
         raise
 
 
@@ -818,14 +884,17 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                 if not file.startswith('.'):  # Skip hidden files
                     console.print(f"  • [green]{file}[/green]")
 
+        # Rename report to question-based filename
+        final_filename = rename_final_report(question)
+
         # Check if final report was created
-        if os.path.exists("final_report.md"):
-            console.print("\n[bold green]✓ Rapport opgeslagen in:[/bold green] [link=file://final_report.md]final_report.md[/link]")
+        if final_filename and os.path.exists(final_filename):
+            console.print(f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]")
 
             # Show preview of report
-            with open("final_report.md", "r") as f:
+            with open(final_filename, "r") as f:
                 content = f.read()
-                preview = content[:500] + "\n\n[dim]...(zie final_report.md voor volledig rapport)[/dim]" if len(content) > 500 else content
+                preview = content[:500] + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]" if len(content) > 500 else content
 
                 console.print("\n")
                 console.print(Panel(
@@ -834,7 +903,7 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     border_style="cyan"
                 ))
         else:
-            console.print("\n[bold red]⚠️  WAARSCHUWING: Geen final_report.md gevonden![/bold red]")
+            console.print("\n[bold red]⚠️  WAARSCHUWING: Geen rapport gevonden![/bold red]")
             console.print("[yellow]De agent heeft het onderzoek gedaan maar geen rapport geschreven.[/yellow]")
             console.print("[yellow]Dit kan betekenen:[/yellow]")
             console.print("  [dim]• Recursion limit bereikt voordat rapport werd geschreven[/dim]")
@@ -847,6 +916,9 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
         console.print("\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]")
         # Still try to salvage research into a report
         ensure_report_exists(question, None, partial=True)
+        final_filename = rename_final_report(question)
+        if final_filename:
+            console.print(f"[dim]Partial report saved as: {final_filename}[/dim]")
         return None
     except Exception as e:
         # Check for recursion limit error
@@ -860,6 +932,9 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
             console.print("\n[cyan]💡 Tip:[/cyan] Probeer het opnieuw met een hogere recursion limit (bijv. 300-500)")
             # Still try to salvage research into a report
             ensure_report_exists(question, None, partial=True)
+            final_filename = rename_final_report(question)
+            if final_filename:
+                console.print(f"[dim]Partial report saved as: {final_filename}[/dim]")
             return None
         else:
             console.print(f"\n\n[bold red]❌ Fout opgetreden:[/bold red] {str(e)}")

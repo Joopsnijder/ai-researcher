@@ -2,19 +2,14 @@ import os
 import dotenv
 from typing import Literal
 import time
-from datetime import timedelta
 
 from tavily import TavilyClient
 from multi_search_api import SmartSearchTool
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.live import Live
 from rich.table import Table
 from rich.markdown import Markdown
-from rich import print as rprint
 from rich.rule import Rule
-from rich.text import Text
 from rich.prompt import Prompt
 
 from deepagents import create_deep_agent
@@ -41,7 +36,7 @@ class HybridSearchTool:
             self.multi_search = SmartSearchTool(
                 serper_api_key=os.getenv("SERPER_API_KEY"),
                 brave_api_key=os.getenv("BRAVE_API_KEY"),
-                enable_cache=False  # Disable cache to avoid thread-safety issues with parallel searches
+                enable_cache=True,  # Thread-safe caching (uses threading.Lock since v0.1.0)
             )
 
     def normalize_multi_search_response(self, response):
@@ -52,7 +47,7 @@ class HybridSearchTool:
                 {
                     "title": result.get("title", ""),
                     "content": result.get("snippet", ""),  # snippet -> content
-                    "url": result.get("link", ""),         # link -> url
+                    "url": result.get("link", ""),  # link -> url
                     "score": 0.9,  # Multi-search doesn't provide scores
                 }
                 for result in response.get("results", [])
@@ -74,25 +69,76 @@ class HybridSearchTool:
             response = self.multi_search.search(query=query, num_results=max_results)
             normalized = self.normalize_multi_search_response(response)
             provider_name = normalized.get("_provider", "Unknown")
-            self.provider_usage[provider_name] = self.provider_usage.get(provider_name, 0) + 1
+            self.provider_usage[provider_name] = (
+                self.provider_usage.get(provider_name, 0) + 1
+            )
             normalized["_actual_provider"] = provider_name
             return normalized
 
         elif self.provider == "auto":
             # Try multi-search first (free), fallback to Tavily
             try:
-                response = self.multi_search.search(query=query, num_results=max_results)
+                response = self.multi_search.search(
+                    query=query, num_results=max_results
+                )
                 normalized = self.normalize_multi_search_response(response)
                 provider_name = normalized.get("_provider", "Unknown")
-                self.provider_usage[provider_name] = self.provider_usage.get(provider_name, 0) + 1
+                self.provider_usage[provider_name] = (
+                    self.provider_usage.get(provider_name, 0) + 1
+                )
                 normalized["_actual_provider"] = provider_name
                 return normalized
             except Exception as e:
-                console.print(f"[yellow]Multi-search failed, using Tavily: {e}[/yellow]")
+                console.print(
+                    f"[yellow]Multi-search failed, using Tavily: {e}[/yellow]"
+                )
                 result = self.tavily.search(query, max_results=max_results, topic=topic)
-                self.provider_usage["Tavily (fallback)"] = self.provider_usage.get("Tavily (fallback)", 0) + 1
+                self.provider_usage["Tavily (fallback)"] = (
+                    self.provider_usage.get("Tavily (fallback)", 0) + 1
+                )
                 result["_actual_provider"] = "Tavily (fallback)"
                 return result
+
+    def clear_cache(self):
+        """Clear the search cache (multi-search only)"""
+        if self.provider in ["multi-search", "auto"] and hasattr(self, "multi_search"):
+            self.multi_search.clear_cache()
+            console.print("[green]✓[/green] Cache cleared successfully")
+        else:
+            console.print("[yellow]Cache not available for this provider[/yellow]")
+
+    def get_cache_stats(self):
+        """Get cache statistics (multi-search only)"""
+        if self.provider in ["multi-search", "auto"] and hasattr(self, "multi_search"):
+            status = self.multi_search.get_status()
+            cache_info = status.get("cache", {})
+            return {
+                "total_entries": cache_info.get("total_entries", 0),
+                "oldest_entry": cache_info.get("oldest_entry", "N/A"),
+                "newest_entry": cache_info.get("newest_entry", "N/A"),
+                "cache_file": cache_info.get("cache_file", "N/A"),
+            }
+        return None
+
+    def display_cache_stats(self):
+        """Display cache statistics in a nice format"""
+        stats = self.get_cache_stats()
+        if stats is None:
+            console.print(
+                "[yellow]Cache stats not available for this provider[/yellow]"
+            )
+            return
+
+        table = Table(title="Cache Statistics", show_header=False)
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Total Entries", str(stats["total_entries"]))
+        table.add_row("Oldest Entry", stats["oldest_entry"])
+        table.add_row("Newest Entry", stats["newest_entry"])
+        table.add_row("Cache Location", stats["cache_file"])
+
+        console.print(table)
 
 
 # Global search tool (will be initialized after provider selection)
@@ -104,9 +150,11 @@ class AgentTracker:
     def __init__(self):
         self.current_step = None
         self.searches_count = 0
+        self.cache_hits = 0
         self.messages_count = 0
         self.file_operations = []
         self.current_todos = []
+
 
 tracker = AgentTracker()
 
@@ -137,12 +185,14 @@ def display_todos(todos):
 
         todo_table.add_row(icon, f"{task_style}{content}[/]")
 
-    console.print(Panel(
-        todo_table,
-        title="[bold cyan]📋 Taken[/bold cyan]",
-        border_style="cyan",
-        padding=(0, 1)
-    ))
+    console.print(
+        Panel(
+            todo_table,
+            title="[bold cyan]📋 Taken[/bold cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+    )
 
 
 # Search tool to use to do research
@@ -160,17 +210,23 @@ def internet_search(
     search_docs = search_tool.search(query, max_results=max_results, topic=topic)
 
     # Show compact search result on one line
-    if isinstance(search_docs, dict) and 'results' in search_docs:
-        results_count = len(search_docs['results'])
+    if isinstance(search_docs, dict) and "results" in search_docs:
+        results_count = len(search_docs["results"])
         # Truncate query if too long
         display_query = query[:60] + "..." if len(query) > 60 else query
         provider_name = search_docs.get("_actual_provider", "Unknown")
         cache_hit = search_docs.get("_cache_hit", False)
-        cache_indicator = " [dim](cache)[/dim]" if cache_hit else ""
-        console.print(f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [green]→ {results_count} resultaten[/green] [dim]({provider_name}){cache_indicator}[/dim]")
+        if cache_hit:
+            tracker.cache_hits += 1
+        cache_indicator = " [green]✓ CACHED[/green]" if cache_hit else ""
+        console.print(
+            f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [green]→ {results_count} resultaten[/green] [dim]({provider_name})[/dim]{cache_indicator}"
+        )
     else:
         display_query = query[:60] + "..." if len(query) > 60 else query
-        console.print(f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [yellow]→ geen resultaten[/yellow]")
+        console.print(
+            f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [yellow]→ geen resultaten[/yellow]"
+        )
 
     return search_docs
 
@@ -178,7 +234,7 @@ def internet_search(
 def write_file(filename: str, content: str):
     """Write content to a file (for Quick Research mode)"""
     try:
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, "w", encoding="utf-8") as f:
             f.write(content)
         console.print(f"[bold green]✍️  Wrote file:[/bold green] {filename}")
         return f"Successfully wrote {len(content)} characters to {filename}"
@@ -430,6 +486,7 @@ agent = create_deep_agent(
 # These functions ensure final_report.md ALWAYS exists after agent runs
 # ══════════════════════════════════════════════════════════════
 
+
 def extract_research_from_messages(messages):
     """
     Extract research findings from agent messages
@@ -443,11 +500,13 @@ def extract_research_from_messages(messages):
     research_findings = []
 
     for msg in messages:
-        if hasattr(msg, 'content') and isinstance(msg.content, str):
+        if hasattr(msg, "content") and isinstance(msg.content, str):
             # Skip system messages and very short responses
             if not msg.content.startswith("You are") and len(msg.content) > 100:
                 # Skip tool call confirmations
-                if not msg.content.startswith("Successfully") and not msg.content.startswith("Error"):
+                if not msg.content.startswith(
+                    "Successfully"
+                ) and not msg.content.startswith("Error"):
                     research_findings.append(msg.content)
 
     return "\n\n---\n\n".join(research_findings) if research_findings else ""
@@ -465,7 +524,9 @@ def create_emergency_report(question, research_content, partial=False):
     Returns:
         str: Markdown formatted report
     """
-    status = "Partial Research Report" if partial else "Research Report (Auto-Generated)"
+    status = (
+        "Partial Research Report" if partial else "Research Report (Auto-Generated)"
+    )
     warning = ""
 
     if partial:
@@ -496,7 +557,7 @@ def create_emergency_report(question, research_content, partial=False):
 ---
 
 *This report was auto-generated by the deterministic safety net in `run_research()`*
-*Generated at: {time.strftime('%Y-%m-%d %H:%M:%S')}*
+*Generated at: {time.strftime("%Y-%m-%d %H:%M:%S")}*
 """
 
     return report
@@ -519,7 +580,9 @@ def ensure_report_exists(question, result, partial=False):
         console.print("[dim]✓ final_report.md already exists (created by agent)[/dim]")
         return
 
-    console.print("\n[bold yellow]⚠️  Agent did not create final_report.md - generating emergency report...[/bold yellow]")
+    console.print(
+        "\n[bold yellow]⚠️  Agent did not create final_report.md - generating emergency report...[/bold yellow]"
+    )
 
     # Extract any research from agent messages
     research_content = ""
@@ -554,9 +617,9 @@ def generate_report_filename(question: str) -> str:
     safe_question = question[:50]
 
     # Remove special characters and convert to lowercase
-    safe_question = re.sub(r'[^\w\s-]', '', safe_question)
-    safe_question = re.sub(r'[-\s]+', '-', safe_question)
-    safe_question = safe_question.strip('-').lower()
+    safe_question = re.sub(r"[^\w\s-]", "", safe_question)
+    safe_question = re.sub(r"[-\s]+", "-", safe_question)
+    safe_question = safe_question.strip("-").lower()
 
     # Ensure it's not empty
     if not safe_question:
@@ -599,6 +662,7 @@ def rename_final_report(question: str) -> str:
 # QUICK RESEARCH IMPLEMENTATION
 # ══════════════════════════════════════════════════════════════
 
+
 def run_quick_research(question: str, max_searches: int = 5):
     """
     Quick research using direct LLM calls (no agentic overhead)
@@ -619,15 +683,17 @@ def run_quick_research(question: str, max_searches: int = 5):
     start_time = time.time()
 
     # Track existing files before starting
-    existing_files = set(os.listdir('.'))
+    existing_files = set(os.listdir("."))
 
     # Print header
     console.print("\n")
-    console.print(Panel.fit(
-        f"[bold white]{question}[/bold white]",
-        title="[bold cyan]🚀 AI Quick Research[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold white]{question}[/bold white]",
+            title="[bold cyan]🚀 AI Quick Research[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     console.print("\n[yellow]Starting quick research (direct LLM mode)...[/yellow]\n")
 
@@ -645,7 +711,7 @@ def run_quick_research(question: str, max_searches: int = 5):
         # Create initial message with system prompt and question
         messages = [
             {"role": "system", "content": quick_research_prompt},
-            {"role": "user", "content": question}
+            {"role": "user", "content": question},
         ]
 
         console.print("[dim]💭 Analyzing question and planning research...[/dim]\n")
@@ -659,46 +725,67 @@ def run_quick_research(question: str, max_searches: int = 5):
             response = model_with_tools.invoke(messages)
 
             # Add response to conversation
-            messages.append({"role": "assistant", "content": response.content, "tool_calls": response.tool_calls if hasattr(response, 'tool_calls') else []})
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content,
+                    "tool_calls": response.tool_calls
+                    if hasattr(response, "tool_calls")
+                    else [],
+                }
+            )
 
             # Check if model wants to use tools
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if hasattr(response, "tool_calls") and response.tool_calls:
                 # Execute tool calls
                 for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_input = tool_call['args']
+                    tool_name = tool_call["name"]
+                    tool_input = tool_call["args"]
 
-                    if tool_name == 'internet_search' and searches_performed < max_searches:
+                    if (
+                        tool_name == "internet_search"
+                        and searches_performed < max_searches
+                    ):
                         # Execute search
                         result = internet_search(**tool_input)
                         searches_performed += 1
 
                         # Add tool result to conversation
-                        messages.append({
-                            "role": "tool",
-                            "content": str(result),
-                            "tool_call_id": tool_call['id']
-                        })
-                    elif tool_name == 'write_file':
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": str(result),
+                                "tool_call_id": tool_call["id"],
+                            }
+                        )
+                    elif tool_name == "write_file":
                         # Execute file write
                         result = write_file(**tool_input)
 
                         # Add tool result to conversation
-                        messages.append({
-                            "role": "tool",
-                            "content": str(result),
-                            "tool_call_id": tool_call['id']
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": str(result),
+                                "tool_call_id": tool_call["id"],
+                            }
+                        )
                     else:
                         # Search limit reached or unknown tool
-                        messages.append({
-                            "role": "tool",
-                            "content": "Search limit reached" if tool_name == 'internet_search' else "Tool not available",
-                            "tool_call_id": tool_call['id']
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": "Search limit reached"
+                                if tool_name == "internet_search"
+                                else "Tool not available",
+                                "tool_call_id": tool_call["id"],
+                            }
+                        )
             else:
                 # No more tool calls - model is done
-                console.print("\n[dim]📝 Finalizing research and creating report...[/dim]\n")
+                console.print(
+                    "\n[dim]📝 Finalizing research and creating report...[/dim]\n"
+                )
                 break
 
         # Calculate duration
@@ -725,17 +812,36 @@ def run_quick_research(question: str, max_searches: int = 5):
 
         stats_table.add_row("⏱️  Duur", duration_str)
         stats_table.add_row("🔍 Aantal zoekopdrachten", str(searches_performed))
-        stats_table.add_row("💬 LLM interactions", str(len([m for m in messages if m.get('role') == 'assistant'])))
+
+        # Add cache statistics
+        if tracker.cache_hits > 0:
+            cache_percentage = (
+                (tracker.cache_hits / tracker.searches_count * 100)
+                if tracker.searches_count > 0
+                else 0
+            )
+            stats_table.add_row(
+                "💾 Cache hits", f"{tracker.cache_hits} ({cache_percentage:.0f}%)"
+            )
+            api_calls_saved = tracker.cache_hits
+            stats_table.add_row("✨ API calls bespaard", str(api_calls_saved))
+
+        stats_table.add_row(
+            "💬 LLM interactions",
+            str(len([m for m in messages if m.get("role") == "assistant"])),
+        )
         stats_table.add_row("🚀 Mode", "Quick Research (Direct LLM)")
 
-        console.print(Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green"))
+        console.print(
+            Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green")
+        )
 
         # Show newly created files
-        new_files = set(os.listdir('.')) - existing_files
+        new_files = set(os.listdir(".")) - existing_files
         if new_files:
             console.print("\n[bold]Nieuwe files aangemaakt:[/bold]")
             for file in sorted(new_files):
-                if not file.startswith('.'):
+                if not file.startswith("."):
                     console.print(f"  • [green]{file}[/green]")
 
         # Rename report to question-based filename
@@ -743,23 +849,38 @@ def run_quick_research(question: str, max_searches: int = 5):
 
         # Show report preview
         if final_filename and os.path.exists(final_filename):
-            console.print(f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]")
+            console.print(
+                f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]"
+            )
 
             with open(final_filename, "r") as f:
                 content = f.read()
-                preview = content[:500] + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]" if len(content) > 500 else content
+                preview = (
+                    content[:500]
+                    + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]"
+                    if len(content) > 500
+                    else content
+                )
 
                 console.print("\n")
-                console.print(Panel(
-                    Markdown(preview),
-                    title="[bold cyan]📄 Rapport Preview[/bold cyan]",
-                    border_style="cyan"
-                ))
+                console.print(
+                    Panel(
+                        Markdown(preview),
+                        title="[bold cyan]📄 Rapport Preview[/bold cyan]",
+                        border_style="cyan",
+                    )
+                )
 
-        return {"messages": messages, "searches": searches_performed, "report_file": final_filename}
+        return {
+            "messages": messages,
+            "searches": searches_performed,
+            "report_file": final_filename,
+        }
 
     except KeyboardInterrupt:
-        console.print("\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]")
+        console.print(
+            "\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]"
+        )
         ensure_report_exists(question, None, partial=True)
         final_filename = rename_final_report(question)
         if final_filename:
@@ -779,6 +900,7 @@ def run_quick_research(question: str, max_searches: int = 5):
 # DEEP RESEARCH IMPLEMENTATION (Agentic)
 # ══════════════════════════════════════════════════════════════
 
+
 def run_research(question: str, recursion_limit: int = 100):
     """Run the research agent with rich UI"""
 
@@ -786,7 +908,7 @@ def run_research(question: str, recursion_limit: int = 100):
     start_time = time.time()
 
     # Track existing files before starting
-    existing_files = set(os.listdir('.'))
+    existing_files = set(os.listdir("."))
 
     # Enhance question with planning reminder for better TODO structure
     enhanced_question = f"""{question}
@@ -795,21 +917,26 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
     # Print header
     console.print("\n")
-    console.print(Panel.fit(
-        f"[bold white]{question}[/bold white]",
-        title="[bold cyan]🔬 AI Research Agent[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold white]{question}[/bold white]",
+            title="[bold cyan]🔬 AI Research Agent[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     console.print("\n[yellow]Agent gestart...[/yellow]\n")
 
     try:
         # Stream the agent's work with recursion limit
         # This prevents infinite loops by limiting the number of agent iterations
+        # Collect the final result during streaming to avoid running the agent twice
+        result = {"messages": []}
+
         for event in agent.stream(
             {"messages": [{"role": "user", "content": enhanced_question}]},
             {"recursion_limit": recursion_limit},  # Maximum number of agent steps
-            stream_mode="updates"
+            stream_mode="updates",
         ):
             # Track agent steps
             if event:
@@ -818,9 +945,14 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     if node_data is None:
                         continue
 
+                    # Collect messages from all nodes for the final result
+                    if "messages" in node_data:
+                        result["messages"].extend(node_data["messages"])
+
                     # Check for TODO updates
                     if "todos" in node_data:
                         new_todos = node_data["todos"]
+                        result["todos"] = new_todos
                         # Only display if todos changed
                         if new_todos != tracker.current_todos:
                             tracker.current_todos = new_todos
@@ -836,28 +968,37 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                                     # Check if it's a tool call
                                     if hasattr(msg, "tool_calls") and msg.tool_calls:
                                         for tool_call in msg.tool_calls:
-                                            tool_name = tool_call.get('name', 'unknown')
+                                            tool_name = tool_call.get("name", "unknown")
                                             # Don't show write_todos tool calls (we show the result instead)
                                             if tool_name != "write_todos":
-                                                console.print(f"\n[bold magenta]🛠️  Tool aangeroepen:[/bold magenta] {tool_name}")
+                                                console.print(
+                                                    f"\n[bold magenta]🛠️  Tool aangeroepen:[/bold magenta] {tool_name}"
+                                                )
                                     # Check for text content
-                                    elif isinstance(msg.content, str) and msg.content.strip():
+                                    elif (
+                                        isinstance(msg.content, str)
+                                        and msg.content.strip()
+                                    ):
                                         # Don't print system messages
                                         if not msg.content.startswith("You are"):
-                                            console.print("\n[bold yellow]💭 Agent denkt...[/bold yellow]")
+                                            console.print(
+                                                "\n[bold yellow]💭 Agent denkt...[/bold yellow]"
+                                            )
                                             # Show preview of thinking (first 150 chars)
-                                            preview = msg.content[:150] + "..." if len(msg.content) > 150 else msg.content
+                                            preview = (
+                                                msg.content[:150] + "..."
+                                                if len(msg.content) > 150
+                                                else msg.content
+                                            )
                                             console.print(f"[dim]{preview}[/dim]")
 
                     elif "research-agent" in node_name or "critique-agent" in node_name:
-                        agent_type = "Research" if "research" in node_name else "Critique"
-                        console.print(f"\n[bold blue]🤖 {agent_type} Sub-agent actief[/bold blue]")
-
-        # Get final result (with same recursion limit)
-        result = agent.invoke(
-            {"messages": [{"role": "user", "content": enhanced_question}]},
-            {"recursion_limit": recursion_limit}
-        )
+                        agent_type = (
+                            "Research" if "research" in node_name else "Critique"
+                        )
+                        console.print(
+                            f"\n[bold blue]🤖 {agent_type} Sub-agent actief[/bold blue]"
+                        )
 
         # ==================================================================
         # DETERMINISTIC GUARANTEE: Ensure report exists after agent finishes
@@ -867,7 +1008,6 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
         # Calculate duration
         end_time = time.time()
         duration_seconds = end_time - start_time
-        duration_td = timedelta(seconds=int(duration_seconds))
 
         # Format duration nicely
         hours, remainder = divmod(int(duration_seconds), 3600)
@@ -889,21 +1029,42 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
         stats_table.add_row("⏱️  Duur", duration_str)
         stats_table.add_row("🔍 Aantal zoekopdrachten", str(tracker.searches_count))
+
+        # Add cache statistics
+        if tracker.cache_hits > 0:
+            cache_percentage = (
+                (tracker.cache_hits / tracker.searches_count * 100)
+                if tracker.searches_count > 0
+                else 0
+            )
+            stats_table.add_row(
+                "💾 Cache hits", f"{tracker.cache_hits} ({cache_percentage:.0f}%)"
+            )
+            api_calls_saved = tracker.cache_hits
+            stats_table.add_row("✨ API calls bespaard", str(api_calls_saved))
+
         stats_table.add_row("💬 Aantal berichten", str(len(result.get("messages", []))))
 
         # Add provider usage statistics
         if search_tool and search_tool.provider_usage:
-            provider_stats = ", ".join([f"{name}: {count}" for name, count in search_tool.provider_usage.items()])
+            provider_stats = ", ".join(
+                [
+                    f"{name}: {count}"
+                    for name, count in search_tool.provider_usage.items()
+                ]
+            )
             stats_table.add_row("🌐 Gebruikte providers", provider_stats)
 
-        console.print(Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green"))
+        console.print(
+            Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green")
+        )
 
         # Show newly created files
-        new_files = set(os.listdir('.')) - existing_files
+        new_files = set(os.listdir(".")) - existing_files
         if new_files:
             console.print("\n[bold]Nieuwe files aangemaakt:[/bold]")
             for file in sorted(new_files):
-                if not file.startswith('.'):  # Skip hidden files
+                if not file.startswith("."):  # Skip hidden files
                     console.print(f"  • [green]{file}[/green]")
 
         # Rename report to question-based filename
@@ -911,31 +1072,50 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
         # Check if final report was created
         if final_filename and os.path.exists(final_filename):
-            console.print(f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]")
+            console.print(
+                f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]"
+            )
 
             # Show preview of report
             with open(final_filename, "r") as f:
                 content = f.read()
-                preview = content[:500] + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]" if len(content) > 500 else content
+                preview = (
+                    content[:500]
+                    + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]"
+                    if len(content) > 500
+                    else content
+                )
 
                 console.print("\n")
-                console.print(Panel(
-                    Markdown(preview),
-                    title="[bold cyan]📄 Rapport Preview[/bold cyan]",
-                    border_style="cyan"
-                ))
+                console.print(
+                    Panel(
+                        Markdown(preview),
+                        title="[bold cyan]📄 Rapport Preview[/bold cyan]",
+                        border_style="cyan",
+                    )
+                )
         else:
-            console.print("\n[bold red]⚠️  WAARSCHUWING: Geen rapport gevonden![/bold red]")
-            console.print("[yellow]De agent heeft het onderzoek gedaan maar geen rapport geschreven.[/yellow]")
+            console.print(
+                "\n[bold red]⚠️  WAARSCHUWING: Geen rapport gevonden![/bold red]"
+            )
+            console.print(
+                "[yellow]De agent heeft het onderzoek gedaan maar geen rapport geschreven.[/yellow]"
+            )
             console.print("[yellow]Dit kan betekenen:[/yellow]")
-            console.print("  [dim]• Recursion limit bereikt voordat rapport werd geschreven[/dim]")
+            console.print(
+                "  [dim]• Recursion limit bereikt voordat rapport werd geschreven[/dim]"
+            )
             console.print("  [dim]• Agent heeft file write permission issues[/dim]")
-            console.print("  [dim]• Bug in agent logic - TODOs gemarkeerd als complete zonder daadwerkelijk werk[/dim]")
+            console.print(
+                "  [dim]• Bug in agent logic - TODOs gemarkeerd als complete zonder daadwerkelijk werk[/dim]"
+            )
 
         return result
 
     except KeyboardInterrupt:
-        console.print("\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]")
+        console.print(
+            "\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]"
+        )
         # Still try to salvage research into a report
         ensure_report_exists(question, None, partial=True)
         final_filename = rename_final_report(question)
@@ -944,14 +1124,22 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
         return None
     except Exception as e:
         # Check for recursion limit error
-        if "GraphRecursionError" in str(type(e).__name__) or "Recursion limit" in str(e):
+        if "GraphRecursionError" in str(type(e).__name__) or "Recursion limit" in str(
+            e
+        ):
             console.print("\n\n[bold red]❌ Recursion limit bereikt[/bold red]")
-            console.print(f"[yellow]De agent heeft het maximum aantal iteraties ({recursion_limit}) bereikt.[/yellow]")
+            console.print(
+                f"[yellow]De agent heeft het maximum aantal iteraties ({recursion_limit}) bereikt.[/yellow]"
+            )
             console.print("[yellow]Dit kan betekenen:[/yellow]")
-            console.print("  [dim]• Het onderzoek is te complex voor de huidige limiet[/dim]")
+            console.print(
+                "  [dim]• Het onderzoek is te complex voor de huidige limiet[/dim]"
+            )
             console.print("  [dim]• De sub-agents hebben te veel iteraties nodig[/dim]")
             console.print("  [dim]• Er is mogelijk een oneindige loop[/dim]")
-            console.print("\n[cyan]💡 Tip:[/cyan] Probeer het opnieuw met een hogere recursion limit (bijv. 300-500)")
+            console.print(
+                "\n[cyan]💡 Tip:[/cyan] Probeer het opnieuw met een hogere recursion limit (bijv. 300-500)"
+            )
             # Still try to salvage research into a report
             ensure_report_exists(question, None, partial=True)
             final_filename = rename_final_report(question)
@@ -966,49 +1154,69 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 if __name__ == "__main__":
     # Print welcome banner
     console.print("\n")
-    console.print(Panel.fit(
-        "[bold cyan]AI Research Agent[/bold cyan]\n"
-        "[dim]Powered by Claude & DeepAgents[/dim]",
-        border_style="cyan",
-        padding=(1, 2)
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]AI Research Agent[/bold cyan]\n"
+            "[dim]Powered by Claude & DeepAgents[/dim]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
 
-    console.print("\n[bold yellow]Welkom![/bold yellow] Deze AI research agent kan onderzoek doen naar je vraag.\n")
+    console.print(
+        "\n[bold yellow]Welkom![/bold yellow] Deze AI research agent kan onderzoek doen naar je vraag.\n"
+    )
 
     # Research Mode Selection
     console.print("[bold]Kies een research mode:[/bold]\n")
-    console.print("  [cyan]1.[/cyan] Quick Research   [dim](1-3 min, direct LLM, 3-5 searches)[/dim]")
-    console.print("                      [dim]→ Geschikt voor: feiten, overzichten, snelle antwoorden[/dim]")
-    console.print("  [cyan]2.[/cyan] Deep Research    [dim](10-30 min, agentic, 50-200 searches)[/dim]")
-    console.print("                      [dim]→ Geschikt voor: complexe analyses, diepgaand onderzoek[/dim]")
+    console.print(
+        "  [cyan]1.[/cyan] Quick Research   [dim](1-3 min, direct LLM, 3-5 searches)[/dim]"
+    )
+    console.print(
+        "                      [dim]→ Geschikt voor: feiten, overzichten, snelle antwoorden[/dim]"
+    )
+    console.print(
+        "  [cyan]2.[/cyan] Deep Research    [dim](10-30 min, agentic, 50-200 searches)[/dim]"
+    )
+    console.print(
+        "                      [dim]→ Geschikt voor: complexe analyses, diepgaand onderzoek[/dim]"
+    )
 
     mode_choice = Prompt.ask(
-        "\n[bold cyan]Research mode[/bold cyan]",
-        choices=["1", "2"],
-        default="1"
+        "\n[bold cyan]Research mode[/bold cyan]", choices=["1", "2"], default="1"
     )
 
     is_quick_mode = mode_choice == "1"
 
     if is_quick_mode:
-        console.print("\n[green]✓[/green] Quick Research mode geselecteerd (snel & efficiënt)\n")
+        console.print(
+            "\n[green]✓[/green] Quick Research mode geselecteerd (snel & efficiënt)\n"
+        )
     else:
-        console.print("\n[green]✓[/green] Deep Research mode geselecteerd (diepgaand & grondig)\n")
+        console.print(
+            "\n[green]✓[/green] Deep Research mode geselecteerd (diepgaand & grondig)\n"
+        )
 
     # Recursion limit configuration (only for deep research)
     if not is_quick_mode:
         console.print("[bold]Agent configuratie:[/bold]")
-        console.print("[dim]Let op: Het recursion limit wordt gedeeld tussen de hoofd-agent en sub-agents.[/dim]")
-        console.print("[dim]Voor complexe onderzoeken zijn vaak 150-300 iteraties nodig.[/dim]\n")
+        console.print(
+            "[dim]Let op: Het recursion limit wordt gedeeld tussen de hoofd-agent en sub-agents.[/dim]"
+        )
+        console.print(
+            "[dim]Voor complexe onderzoeken zijn vaak 150-300 iteraties nodig.[/dim]\n"
+        )
 
         recursion_limit_choice = Prompt.ask(
             "[cyan]Maximaal aantal agent iteraties[/cyan] [dim](voorkomt oneindige loops)[/dim]",
-            default="200"
+            default="200",
         )
         try:
             recursion_limit = int(recursion_limit_choice)
             if recursion_limit < 50:
-                console.print("[yellow]⚠️  Minimum 50 iteraties aanbevolen voor sub-agents. Instellen op 50.[/yellow]")
+                console.print(
+                    "[yellow]⚠️  Minimum 50 iteraties aanbevolen voor sub-agents. Instellen op 50.[/yellow]"
+                )
                 recursion_limit = 50
             elif recursion_limit > 500:
                 console.print("[yellow]Maximum 500 iteraties ingesteld[/yellow]")
@@ -1024,26 +1232,28 @@ if __name__ == "__main__":
         # Quick mode: automatically use Multi-Search (free tier, good enough for quick queries)
         selected_provider = "multi-search"
         search_tool = HybridSearchTool(provider=selected_provider)
-        console.print("[dim]Using Multi-Search API (gratis tier) for quick research[/dim]\n")
+        console.print(
+            "[dim]Using Multi-Search API (gratis tier) for quick research[/dim]\n"
+        )
     else:
         # Deep mode: let user choose provider
         console.print("[bold]Kies een search provider:[/bold]\n")
-        console.print("  [cyan]1.[/cyan] Tavily          [dim](betaald, hoogste kwaliteit, AI-optimized)[/dim]")
-        console.print("  [cyan]2.[/cyan] Multi-Search   [dim](gratis tier, auto-fallback, meerdere providers)[/dim]")
-        console.print("  [cyan]3.[/cyan] Auto           [dim](slim kiezen: Multi-Search eerst, Tavily als fallback)[/dim]")
+        console.print(
+            "  [cyan]1.[/cyan] Tavily          [dim](betaald, hoogste kwaliteit, AI-optimized)[/dim]"
+        )
+        console.print(
+            "  [cyan]2.[/cyan] Multi-Search   [dim](gratis tier, auto-fallback, meerdere providers)[/dim]"
+        )
+        console.print(
+            "  [cyan]3.[/cyan] Auto           [dim](slim kiezen: Multi-Search eerst, Tavily als fallback)[/dim]"
+        )
 
         provider_choice = Prompt.ask(
-            "\n[bold cyan]Provider[/bold cyan]",
-            choices=["1", "2", "3"],
-            default="2"
+            "\n[bold cyan]Provider[/bold cyan]", choices=["1", "2", "3"], default="2"
         )
 
         # Map choice to provider
-        provider_map = {
-            "1": "tavily",
-            "2": "multi-search",
-            "3": "auto"
-        }
+        provider_map = {"1": "tavily", "2": "multi-search", "3": "auto"}
         selected_provider = provider_map[provider_choice]
 
         # Initialize search tool with selected provider
@@ -1053,21 +1263,55 @@ if __name__ == "__main__":
         provider_names = {
             "tavily": "Tavily",
             "multi-search": "Multi-Search API (gratis tier)",
-            "auto": "Auto (hybrid modus)"
+            "auto": "Auto (hybrid modus)",
         }
-        console.print(f"\n[green]✓[/green] {provider_names[selected_provider]} geactiveerd\n")
+        console.print(
+            f"\n[green]✓[/green] {provider_names[selected_provider]} geactiveerd\n"
+        )
+
+    # Cache management menu (optional, for dev mode)
+    console.print("[dim]Dev tools beschikbaar: [c] Cache stats, [x] Clear cache[/dim]")
+    utility_choice = Prompt.ask(
+        "\n[bold cyan]Doorgaan of dev tool gebruiken?[/bold cyan]",
+        choices=["go", "c", "x"],
+        default="go",
+    )
+
+    if utility_choice == "c":
+        # Show cache statistics
+        search_tool.display_cache_stats()
+        console.print()
+    elif utility_choice == "x":
+        # Clear cache
+        if (
+            Prompt.ask(
+                "[yellow]Weet je zeker dat je de cache wilt wissen?[/yellow]",
+                choices=["ja", "nee"],
+                default="nee",
+            )
+            == "ja"
+        ):
+            search_tool.clear_cache()
+        console.print()
 
     # Get question from user
     question = Prompt.ask(
         "[bold cyan]Wat wil je onderzoeken?[/bold cyan]",
-        default="What are the latest advancements in Explainable AI as of 2025?"
+        default="What are the latest advancements in Explainable AI as of 2025?",
     )
 
     # Confirm before starting
     console.print(f"\n[dim]Je vraag: {question}[/dim]")
-    console.print(f"[dim]Mode: {'Quick Research' if is_quick_mode else 'Deep Research'}[/dim]")
+    console.print(
+        f"[dim]Mode: {'Quick Research' if is_quick_mode else 'Deep Research'}[/dim]"
+    )
 
-    if Prompt.ask("\n[bold]Start onderzoek?[/bold]", choices=["ja", "nee"], default="ja") == "ja":
+    if (
+        Prompt.ask(
+            "\n[bold]Start onderzoek?[/bold]", choices=["ja", "nee"], default="ja"
+        )
+        == "ja"
+    ):
         if is_quick_mode:
             run_quick_research(question, max_searches=5)
         else:

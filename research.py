@@ -389,6 +389,17 @@ CRITICAL REQUIREMENT - FINAL REPORT:
 You MUST ALWAYS write a final report to `final_report.md` before you finish. This is NOT optional!
 Even if you hit time or recursion limits, you must write SOMETHING to final_report.md with whatever research you've gathered so far.
 
+IMPORTANT - REPORT CONTENT RULES:
+The final report must contain ONLY the polished research findings. NEVER include:
+- TODO lists or task status updates
+- Internal planning notes or thinking
+- References to "write_todos" or task management
+- JSON or dictionary structures like {'content': ...}
+- Meta-commentary about your process (e.g., "Now I will compile...")
+- The original question repeated as plain text
+
+The report should read like a professional article or research paper that someone could publish directly.
+
 When you have gathered enough information, write it to `final_report.md`
 
 You can call the critique-agent to get a critique of the final report. After that (if needed) you can do more research and edit the `final_report.md`

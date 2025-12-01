@@ -1000,7 +1000,13 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
                     # Collect messages from all nodes for the final result
                     if "messages" in node_data:
-                        result["messages"].extend(node_data["messages"])
+                        messages = node_data["messages"]
+                        # Handle Overwrite objects from deepagents
+                        if hasattr(messages, "value"):
+                            messages = messages.value
+                        # Only extend if it's actually a list
+                        if isinstance(messages, list):
+                            result["messages"].extend(messages)
 
                     # Check for TODO updates
                     if "todos" in node_data:
@@ -1016,7 +1022,13 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     if node_name == "model":
                         # Model is thinking
                         if "messages" in node_data:
-                            for msg in node_data["messages"]:
+                            msgs = node_data["messages"]
+                            # Handle Overwrite objects from deepagents
+                            if hasattr(msgs, "value"):
+                                msgs = msgs.value
+                            if not isinstance(msgs, list):
+                                continue
+                            for msg in msgs:
                                 if hasattr(msg, "content") and msg.content:
                                     # Check if it's a tool call
                                     if hasattr(msg, "tool_calls") and msg.tool_calls:

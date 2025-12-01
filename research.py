@@ -467,14 +467,26 @@ Make sure the final answer report is in the SAME language as the human messages 
 Format the report in clear markdown with proper structure and include source references where appropriate.
 
 <Citation Rules>
-- Assign each unique URL a single citation number in your text
-- End with ### Sources that lists each source with corresponding numbers
-- IMPORTANT: Number sources sequentially without gaps (1,2,3,4...) in the final list regardless of which sources you choose
-- Each source should be a separate line item in a list, so that in markdown it is rendered as a list.
-- Example format:
-  [1] Source Title: URL
-  [2] Source Title: URL
-- Citations are extremely important. Make sure to include these, and pay a lot of attention to getting these right. Users will often use these citations to look into more information.
+INLINE CITATIONS ARE MANDATORY! Every fact, statistic, claim, or piece of information from a source MUST have an inline citation.
+
+How to cite inline:
+- Use numbered references like [1], [2], [3] directly after the relevant sentence or paragraph
+- Example: "LangGraph supports cyclic workflows and state management [1]. CrewAI focuses on role-based agent collaboration [2]."
+
+How to format the Sources section:
+- End with ## Bronnen (or ## Sources in English reports)
+- Number sources sequentially: [1], [2], [3], etc.
+- Format each source as: [number] Title - URL
+- Example:
+  [1] LangGraph Documentation - https://langchain.com/langgraph
+  [2] CrewAI GitHub - https://github.com/crewai/crewai
+
+CRITICAL REQUIREMENTS:
+- EVERY paragraph that contains researched information must have at least one citation
+- Do NOT write facts without citing where they came from
+- If you cannot cite a source for a claim, do not include that claim
+- Match inline citation numbers [1], [2] to the Sources list at the end
+- Citations show credibility and allow readers to verify information
 </Citation Rules>
 </report_instructions>
 

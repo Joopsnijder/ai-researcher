@@ -13,6 +13,7 @@ from rich.rule import Rule
 from rich.prompt import Prompt
 
 from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 
 dotenv.load_dotenv()
 
@@ -473,11 +474,12 @@ You have access to a few tools.
 Use this to run an internet search for a given query. You can specify the number of results, the topic, and whether raw content should be included.
 """
 
-# Create the agent
+# Create the agent with FilesystemBackend to write reports to disk
 agent = create_deep_agent(
     tools=[internet_search],
     system_prompt=research_instructions,
     subagents=[critique_sub_agent, research_sub_agent],
+    backend=FilesystemBackend(),  # Write to actual filesystem, not in-memory
 )
 
 

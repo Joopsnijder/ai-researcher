@@ -312,7 +312,22 @@ Minor improvements (these will be IGNORED, but list them for completeness):
 
 List each issue briefly. Maximum 3 items. If none, write "None identified."
 
-CRITICAL: Always use this exact format with ## HIGH Priority, ## MEDIUM Priority, and ## LOW Priority headers.
+CRITICAL FORMATTING RULES:
+1. You MUST ALWAYS use the exact format with ## HIGH Priority, ## MEDIUM Priority, and ## LOW Priority headers
+2. NEVER deviate from this format, even for severe issues like topic mismatches
+3. If the report addresses the wrong topic, list it as the FIRST item under ## HIGH Priority
+4. Do NOT use custom headers like "CRITICAL MISMATCH" - everything must fit in HIGH/MEDIUM/LOW
+5. Your response must start with "## HIGH Priority" (no preamble or introduction)
+
+Example of correct format for a topic mismatch:
+## HIGH Priority
+- TOPIC MISMATCH: The report discusses [wrong topic] but question.txt asks about [correct topic]. The entire report needs to be rewritten to address the correct question.
+
+## MEDIUM Priority
+None identified.
+
+## LOW Priority
+None identified.
 """
 
 critique_sub_agent = {

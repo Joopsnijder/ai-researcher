@@ -37,7 +37,7 @@ class HybridSearchTool:
             self.multi_search = SmartSearchTool(
                 serper_api_key=os.getenv("SERPER_API_KEY"),
                 brave_api_key=os.getenv("BRAVE_API_KEY"),
-                enable_cache=True,  # Thread-safe caching (uses threading.Lock since v0.1.0)
+                enable_cache=False,  # Disabled: multi-search-api cache has thread-safety issues with parallel sub-agents
             )
 
     def normalize_multi_search_response(self, response):

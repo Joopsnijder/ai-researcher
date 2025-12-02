@@ -789,6 +789,12 @@ def run_quick_research(question: str, max_searches: int = 5):
     # Start timing
     start_time = time.time()
 
+    # Clean up files from previous runs to avoid confusion
+    for old_file in ["question.txt", "final_report.md"]:
+        if os.path.exists(old_file):
+            os.remove(old_file)
+            console.print(f"[dim]Removed old {old_file}[/dim]")
+
     # Track existing files before starting
     existing_files = set(os.listdir("."))
 
@@ -1013,6 +1019,12 @@ def run_research(question: str, recursion_limit: int = 100):
 
     # Start timing
     start_time = time.time()
+
+    # Clean up files from previous runs to avoid confusion
+    for old_file in ["question.txt", "final_report.md"]:
+        if os.path.exists(old_file):
+            os.remove(old_file)
+            console.print(f"[dim]Removed old {old_file}[/dim]")
 
     # Track existing files before starting
     existing_files = set(os.listdir("."))

@@ -883,6 +883,115 @@ def create_emergency_report(question, research_content, partial=False):
     return report
 
 
+def detect_language(text: str) -> str:
+    """
+    Detect language of text using simple heuristics.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        "nl" for Dutch, "en" for English
+    """
+    dutch_words = [
+        "de",
+        "het",
+        "een",
+        "van",
+        "voor",
+        "met",
+        "zijn",
+        "worden",
+        "naar",
+        "door",
+        "aan",
+        "op",
+        "is",
+        "dat",
+        "dit",
+        "heeft",
+        "nieuwe",
+        "bij",
+    ]
+    words = text.lower().split()[:100]
+    dutch_count = sum(1 for w in words if w in dutch_words)
+    # Lower threshold: 3+ Dutch words suggests Dutch text
+    return "nl" if dutch_count >= 3 else "en"
+
+
+def refine_emergency_report_with_llm(
+    question: str, raw_findings: str, language: str = "nl"
+) -> str | None:
+    """
+    Use Claude to restructure raw emergency content into a professional report.
+
+    Args:
+        question: The original research question
+        raw_findings: Raw extracted research content
+        language: Language for the report (nl/en)
+
+    Returns:
+        Structured markdown report, or None if refinement fails
+    """
+    from anthropic import Anthropic
+
+    # Skip if no substantial content
+    if not raw_findings or len(raw_findings.strip()) < 500:
+        return None
+
+    client = Anthropic()
+
+    lang_instruction = (
+        "Schrijf in het Nederlands" if language == "nl" else "Write in English"
+    )
+
+    refinement_prompt = f"""Je bent een professionele research editor. Een onderzoeksproces werd onderbroken
+voordat de agent het rapport kon schrijven. Je hebt ruwe research bevindingen uit agent messages.
+
+TAAK: Herstructureer dit tot een professioneel onderzoeksrapport met:
+1. Management Samenvatting (3-4 zinnen kernboodschap)
+2. Duidelijke secties met betekenisvolle koppen
+3. Logische flow en narratief
+4. Synthese van bevindingen (niet alleen opsommen)
+5. Bronvermelding behouden waar aanwezig [nummer] formaat
+6. Conclusie met key takeaways
+
+{lang_instruction}.
+
+ORIGINELE VRAAG:
+{question}
+
+RUWE BEVINDINGEN:
+{raw_findings[:80000]}
+
+OUTPUT FORMAT:
+- Gebruik markdown met duidelijke hiërarchie
+- Begin met ## Management Samenvatting
+- Gebruik ## voor hoofdsecties, ### voor subsecties
+- Behoud alle [nummer] citaties en bronnen uit de ruwe bevindingen
+- Eindig met ## Conclusie en ## Bronnen (met alle gevonden URLs)
+- Minimaal 2000 woorden voor een grondig rapport
+"""
+
+    try:
+        console.print(
+            "\n[bold yellow]📝 Genereren van gestructureerd rapport uit research...[/bold yellow]"
+        )
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=12000,
+            messages=[{"role": "user", "content": refinement_prompt}],
+        )
+        refined = response.content[0].text
+        console.print("[green]✓ Rapport succesvol gestructureerd met LLM[/green]")
+        return refined
+    except Exception as e:
+        console.print(
+            f"[yellow]⚠ LLM refinement failed: {e}, using raw content[/yellow]"
+        )
+        return None
+
+
 def ensure_report_exists(question, result, partial=False):
     """
     GUARANTEE: Ensures final_report.md exists after agent execution
@@ -959,8 +1068,27 @@ def ensure_report_exists(question, result, partial=False):
     if result and "messages" in result:
         research_content = extract_research_from_messages(result["messages"])
 
-    # Create emergency report
-    report = create_emergency_report(question, research_content, partial)
+    # Try LLM refinement first for better quality reports
+    language = detect_language(question)
+    refined_content = refine_emergency_report_with_llm(
+        question, research_content, language
+    )
+
+    if refined_content:
+        # Wrap refined content in report template
+        report = f"""# Onderzoeksrapport (Automatisch Gegenereerd)
+
+> ℹ️ **Note**: Dit rapport is automatisch gegenereerd en gestructureerd uit verzamelde
+> research bevindingen omdat de agent het eindrapport niet zelf heeft geschreven.
+
+{refined_content}
+
+---
+*Rapport gestructureerd met Claude op: {time.strftime("%Y-%m-%d %H:%M:%S")}*
+"""
+    else:
+        # Fallback to old method if LLM fails
+        report = create_emergency_report(question, research_content, partial)
 
     # Write report to file
     with open(final_report_path, "w") as f:

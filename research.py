@@ -742,10 +742,11 @@ How to cite inline:
 How to format the Sources section:
 - End with ## Bronnen (or ## Sources in English reports)
 - Number sources sequentially: [1], [2], [3], etc.
-- Format each source as: [number] Title - URL
+- Format each source as a markdown link: [number] [Title](URL)
+- Put each source on its own line for readability
 - Example:
-  [1] LangGraph Documentation - https://langchain.com/langgraph
-  [2] CrewAI GitHub - https://github.com/crewai/crewai
+  [1] [LangGraph Documentation](https://langchain.com/langgraph)
+  [2] [CrewAI GitHub](https://github.com/crewai/crewai)
 
 CRITICAL REQUIREMENTS:
 - EVERY paragraph that contains researched information must have at least one citation

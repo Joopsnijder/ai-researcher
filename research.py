@@ -25,6 +25,10 @@ console = Console()
 # Research output folder (keeps reports out of git)
 RESEARCH_FOLDER = "research"
 
+# Report guarantee constants - ensures final report is always written
+REPORT_RESERVED_ITERATIONS = 20  # Iterations reserved for final report writing
+REPORT_TRIGGER_THRESHOLD = 0.85  # Trigger early report at 85% of limit
+
 
 def ensure_research_folder():
     """Create research folder if it doesn't exist"""
@@ -169,9 +173,63 @@ class AgentTracker:
         self.current_todos = []
         self.debug_mode = False
         self.live_display = None  # Rich Live instance for in-place updates
+        # Iteration tracking for report guarantee
+        self.iteration_count = 0
+        self.recursion_limit = 100
+        self.report_triggered = False
 
 
 tracker = AgentTracker()
+
+
+def should_trigger_early_report() -> bool:
+    """
+    Check if we should trigger early report writing to guarantee completion.
+
+    Returns True if:
+    - We've used >= 85% of iterations AND
+    - Report hasn't been triggered yet AND
+    - Final report doesn't exist yet
+    """
+    if tracker.report_triggered:
+        return False
+
+    if tracker.recursion_limit <= 0:
+        return False
+
+    iterations_used_ratio = tracker.iteration_count / tracker.recursion_limit
+
+    # Check if we're approaching the limit
+    if iterations_used_ratio >= REPORT_TRIGGER_THRESHOLD:
+        # Verify report doesn't exist yet
+        final_report_path = os.path.join(RESEARCH_FOLDER, "final_report.md")
+        if not os.path.exists(final_report_path):
+            return True
+
+    return False
+
+
+def create_finalize_instruction() -> str:
+    """
+    Create an urgent instruction for the agent to finalize the report immediately.
+    """
+    return """
+URGENT: You are approaching the iteration limit. You MUST write the final report NOW.
+
+CRITICAL INSTRUCTIONS:
+1. STOP all research activities immediately
+2. Use all findings gathered so far (even if incomplete)
+3. Write the final report to `research/final_report.md` using the write_file tool
+4. Follow the standard report structure (metadata header, Management Samenvatting, etc.)
+5. Include all citations gathered so far
+
+Do NOT:
+- Start new research-agent tasks
+- Call the critique-agent
+- Perform additional searches
+
+BEGIN WRITING THE REPORT IMMEDIATELY.
+"""
 
 
 def create_todo_panel(todos):
@@ -553,6 +611,16 @@ Write as if you ARE a subject matter expert, not an AI describing what it found.
 Only edit the file once at a time (if you call this tool in parallel, there may be conflicts).
 
 REMINDER: Before you finish your work, you MUST have created research/final_report.md. Do not mark your work as complete until this file exists!
+
+ITERATION AWARENESS:
+The system monitors your iteration usage. If you receive an URGENT message about approaching the iteration limit:
+1. IMMEDIATELY stop all research activities
+2. Do NOT start any new sub-agent tasks or searches
+3. Compile all findings gathered so far (even if incomplete)
+4. Write the final report using write_file tool
+5. It's better to have a complete report with partial research than no report at all
+
+The system will notify you when iterations are running low. When this happens, prioritize report completion over additional research.
 
 Here are instructions for writing the final report:
 
@@ -1201,6 +1269,11 @@ def run_research(question: str, recursion_limit: int = 100):
     # Start timing
     start_time = time.time()
 
+    # Reset tracker for new research session
+    tracker.iteration_count = 0
+    tracker.recursion_limit = recursion_limit
+    tracker.report_triggered = False
+
     # Clean up files from previous runs to avoid confusion
     ensure_research_folder()
     cleanup_files = ["question.txt", os.path.join(RESEARCH_FOLDER, "final_report.md")]
@@ -1250,6 +1323,24 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     # Skip if node_data is None
                     if node_data is None:
                         continue
+
+                    # Track iteration count for early report trigger
+                    tracker.iteration_count += 1
+
+                    # Check if we need to trigger early report
+                    if should_trigger_early_report():
+                        console.print(
+                            "\n[bold yellow]>>> Iteratie-limiet nadert - "
+                            "rapport schrijven wordt geforceerd[/bold yellow]\n"
+                        )
+                        tracker.report_triggered = True
+                        # Add finalize instruction to the result messages
+                        # This will be processed by ensure_report_exists if agent doesn't respond
+                        finalize_msg = {
+                            "role": "system",
+                            "content": create_finalize_instruction(),
+                        }
+                        result["messages"].append(finalize_msg)
 
                     # Collect messages from all nodes for the final result
                     if "messages" in node_data:
@@ -1372,6 +1463,11 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
             stats_table.add_row("✨ API calls bespaard", str(api_calls_saved))
 
         stats_table.add_row("💬 Aantal berichten", str(len(result.get("messages", []))))
+        stats_table.add_row(
+            "🔄 Iteraties gebruikt", f"{tracker.iteration_count}/{recursion_limit}"
+        )
+        if tracker.report_triggered:
+            stats_table.add_row("⚡ Early report trigger", "Ja (limiet naderde)")
 
         # Add provider usage statistics
         if search_tool and search_tool.provider_usage:

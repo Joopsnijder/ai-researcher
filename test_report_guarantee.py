@@ -218,6 +218,116 @@ def test_report_guarantee_integration():
         os.remove(FINAL_REPORT_PATH)
 
 
+def test_should_trigger_early_report_below_threshold():
+    """Test that early report trigger is False when below threshold"""
+    from research import should_trigger_early_report, tracker, REPORT_TRIGGER_THRESHOLD
+
+    # Reset tracker
+    tracker.iteration_count = 50
+    tracker.recursion_limit = 100
+    tracker.report_triggered = False
+
+    # Remove any existing report
+    if os.path.exists(FINAL_REPORT_PATH):
+        os.remove(FINAL_REPORT_PATH)
+
+    # 50% is below 85% threshold - should not trigger
+    assert not should_trigger_early_report(), (
+        f"Should not trigger at {50 / 100:.0%}, threshold is {REPORT_TRIGGER_THRESHOLD:.0%}"
+    )
+
+
+def test_should_trigger_early_report_at_threshold():
+    """Test that early report trigger is True when at or above threshold"""
+    from research import should_trigger_early_report, tracker, REPORT_TRIGGER_THRESHOLD
+
+    # Reset tracker
+    tracker.iteration_count = 86  # 86% > 85% threshold
+    tracker.recursion_limit = 100
+    tracker.report_triggered = False
+
+    # Remove any existing report
+    if os.path.exists(FINAL_REPORT_PATH):
+        os.remove(FINAL_REPORT_PATH)
+
+    # 86% is above 85% threshold - should trigger
+    assert should_trigger_early_report(), (
+        f"Should trigger at {86 / 100:.0%}, threshold is {REPORT_TRIGGER_THRESHOLD:.0%}"
+    )
+
+
+def test_should_trigger_early_report_already_triggered():
+    """Test that early report trigger is False when already triggered"""
+    from research import should_trigger_early_report, tracker
+
+    # Reset tracker with already triggered state
+    tracker.iteration_count = 90
+    tracker.recursion_limit = 100
+    tracker.report_triggered = True  # Already triggered
+
+    # Remove any existing report
+    if os.path.exists(FINAL_REPORT_PATH):
+        os.remove(FINAL_REPORT_PATH)
+
+    # Should not trigger again
+    assert not should_trigger_early_report(), "Should not trigger if already triggered"
+
+
+def test_should_trigger_early_report_with_existing_report():
+    """Test that early report trigger is False when report already exists"""
+    from research import should_trigger_early_report, tracker
+
+    # Reset tracker above threshold
+    tracker.iteration_count = 90
+    tracker.recursion_limit = 100
+    tracker.report_triggered = False
+
+    # Create existing report
+    os.makedirs(RESEARCH_FOLDER, exist_ok=True)
+    with open(FINAL_REPORT_PATH, "w") as f:
+        f.write("# Existing Report")
+
+    # Should not trigger when report exists
+    assert not should_trigger_early_report(), (
+        "Should not trigger when report already exists"
+    )
+
+    # Cleanup
+    os.remove(FINAL_REPORT_PATH)
+
+
+def test_create_finalize_instruction_content():
+    """Test that finalize instruction contains required elements"""
+    from research import create_finalize_instruction
+
+    instruction = create_finalize_instruction()
+
+    # Verify essential content
+    assert "URGENT" in instruction, "Should contain URGENT marker"
+    assert "final_report.md" in instruction, "Should reference final_report.md"
+    assert "write_file" in instruction, "Should mention write_file tool"
+    assert "STOP" in instruction, "Should instruct to stop activities"
+    assert (
+        "research-agent" in instruction.lower() or "sub-agent" in instruction.lower()
+    ), "Should mention sub-agents to stop"
+
+
+def test_tracker_iteration_fields_exist():
+    """Test that AgentTracker has all required iteration tracking fields"""
+    from research import AgentTracker
+
+    tracker = AgentTracker()
+
+    # Verify fields exist with correct defaults
+    assert hasattr(tracker, "iteration_count"), "Should have iteration_count"
+    assert hasattr(tracker, "recursion_limit"), "Should have recursion_limit"
+    assert hasattr(tracker, "report_triggered"), "Should have report_triggered"
+
+    assert tracker.iteration_count == 0, "iteration_count should default to 0"
+    assert tracker.recursion_limit == 100, "recursion_limit should default to 100"
+    assert tracker.report_triggered is False, "report_triggered should default to False"
+
+
 if __name__ == "__main__":
     print("Running report guarantee tests...")
     pytest.main([__file__, "-v"])

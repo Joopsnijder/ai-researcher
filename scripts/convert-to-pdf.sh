@@ -76,7 +76,10 @@ titlepage-rule-height: 2
 toc: true
 toc-own-page: true
 numbersections: true
-colorlinks: false
+colorlinks: true
+toccolor: "black"
+linkcolor: "black"
+urlcolor: "blue"
 disable-header-and-footer: true
 lang: "nl"
 geometry: "margin=2.5cm"

@@ -109,6 +109,16 @@ def get_pdf_engine() -> str | None:
     return None
 
 
+def extract_title_from_markdown(md_file: str) -> str | None:
+    """Extract the first H1 title from a markdown file."""
+    with open(md_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("# "):
+                return line[2:].strip()
+    return None
+
+
 def convert_with_pandoc(md_file: str, pdf_path: str) -> tuple[bool, str]:
     """Try to convert using pandoc + LaTeX engine.
 
@@ -118,6 +128,9 @@ def convert_with_pandoc(md_file: str, pdf_path: str) -> tuple[bool, str]:
     pdf_engine = get_pdf_engine()
     if not pdf_engine:
         return False, "No LaTeX engine found (xelatex or pdflatex required)"
+
+    # Extract title from markdown for proper title page
+    title = extract_title_from_markdown(md_file)
 
     try:
         cmd = [
@@ -138,7 +151,16 @@ def convert_with_pandoc(md_file: str, pdf_path: str) -> tuple[bool, str]:
             "linkcolor=blue",
             "-V",
             "urlcolor=blue",
+            # TOC after title
+            "--toc",
+            "--toc-depth=2",
+            "-V",
+            "toc-title=Inhoudsopgave",
         ]
+
+        # Add title metadata for proper title page rendering
+        if title:
+            cmd.extend(["-M", f"title={title}"])
 
         # Add font settings for xelatex (better Unicode support)
         if pdf_engine == "xelatex":

@@ -1,5 +1,7 @@
 import argparse
+import contextlib
 import glob
+import io
 import os
 import time
 from typing import Literal
@@ -36,6 +38,16 @@ def ensure_research_folder():
     if not os.path.exists(RESEARCH_FOLDER):
         os.makedirs(RESEARCH_FOLDER)
         console.print(f"[dim]Created {RESEARCH_FOLDER}/ folder[/dim]")
+
+
+@contextlib.contextmanager
+def suppress_output():
+    """Suppress stdout and stderr output from external libraries."""
+    with (
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
+    ):
+        yield
 
 
 # Hybrid Search Tool supporting multiple providers
@@ -84,7 +96,10 @@ class HybridSearchTool:
             return result
 
         elif self.provider == "multi-search":
-            response = self.multi_search.search(query=query, num_results=max_results)
+            with suppress_output():
+                response = self.multi_search.search(
+                    query=query, num_results=max_results
+                )
             normalized = self.normalize_multi_search_response(response)
             provider_name = normalized.get("_provider", "Unknown")
             self.provider_usage[provider_name] = (
@@ -96,9 +111,10 @@ class HybridSearchTool:
         elif self.provider == "auto":
             # Try multi-search first (free), fallback to Tavily
             try:
-                response = self.multi_search.search(
-                    query=query, num_results=max_results
-                )
+                with suppress_output():
+                    response = self.multi_search.search(
+                        query=query, num_results=max_results
+                    )
                 normalized = self.normalize_multi_search_response(response)
                 provider_name = normalized.get("_provider", "Unknown")
                 self.provider_usage[provider_name] = (
@@ -522,6 +538,7 @@ Things to check:
 - Check that each section is appropriately named
 - Check that the report is written as you would find in an essay or a textbook - it should be text heavy, do not let it just be a list of bullet points!
 - Check that the report is comprehensive. If any paragraphs or sections are short, or missing important details, point it out.
+- Check that the report does not have redundant information - if the same fact or idea is repeated multiple times, point it out.
 - Check that the article covers key areas of the industry, ensures overall understanding, and does not omit important parts.
 - Check that the article deeply analyzes causes, impacts, and trends, providing valuable insights
 - Check that the article closely follows the research topic and directly answers questions

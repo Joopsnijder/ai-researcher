@@ -132,8 +132,6 @@ def convert_with_pandoc(md_file: str, pdf_path: str) -> tuple[bool, str]:
             "fontsize=11pt",
             "-V",
             "documentclass=article",
-            "--toc",
-            "--toc-depth=2",
             "-V",
             "colorlinks=true",
             "-V",

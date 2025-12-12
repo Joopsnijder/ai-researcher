@@ -402,6 +402,38 @@ def test_refine_emergency_report_with_llm_handles_exception():
         assert result is None
 
 
+def test_search_status_display_add_search():
+    """Test that SearchStatusDisplay correctly tracks searches"""
+    from research import SearchStatusDisplay
+
+    display = SearchStatusDisplay(max_history=3)
+
+    # Add searches
+    display.add_search(1, "test query 1", 10, "TestProvider", False)
+    display.add_search(2, "test query 2", 5, "TestProvider", True)
+
+    assert len(display.recent_searches) == 2
+    assert display.recent_searches[0]["num"] == 1
+    assert display.recent_searches[1]["cached"] is True
+
+
+def test_search_status_display_max_history():
+    """Test that SearchStatusDisplay respects max_history limit"""
+    from research import SearchStatusDisplay
+
+    display = SearchStatusDisplay(max_history=2)
+
+    # Add more than max_history searches
+    display.add_search(1, "query 1", 10, "Provider", False)
+    display.add_search(2, "query 2", 10, "Provider", False)
+    display.add_search(3, "query 3", 10, "Provider", False)
+
+    # Should only keep last 2
+    assert len(display.recent_searches) == 2
+    assert display.recent_searches[0]["num"] == 2
+    assert display.recent_searches[1]["num"] == 3
+
+
 if __name__ == "__main__":
     print("Running report guarantee tests...")
     pytest.main([__file__, "-v"])

@@ -10,7 +10,6 @@ from multi_search_api import SmartSearchTool
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.markdown import Markdown
 from rich.rule import Rule
 from rich.prompt import Prompt
 from rich.live import Live
@@ -22,6 +21,16 @@ dotenv.load_dotenv()
 
 # Initialize rich console
 console = Console()
+
+# Research output folder (keeps reports out of git)
+RESEARCH_FOLDER = "research"
+
+
+def ensure_research_folder():
+    """Create research folder if it doesn't exist"""
+    if not os.path.exists(RESEARCH_FOLDER):
+        os.makedirs(RESEARCH_FOLDER)
+        console.print(f"[dim]Created {RESEARCH_FOLDER}/ folder[/dim]")
 
 
 # Hybrid Search Tool supporting multiple providers
@@ -310,11 +319,11 @@ research_sub_agent = {
 
 sub_critique_prompt = """You are a dedicated editor. You are being tasked to critique a report.
 
-You can find the report at `final_report.md`.
+You can find the report at `research/final_report.md`.
 You can find the question/topic for this report at `question.txt`.
 
 You can use the search tool to search for information, if that will help you critique the report.
-Do not write to the `final_report.md` yourself.
+Do not write to the `research/final_report.md` yourself.
 
 Things to check:
 - Check that each section is appropriately named
@@ -396,7 +405,7 @@ WORKFLOW:
 2. Generate 3-5 targeted search queries to gather information
 3. Use the internet_search tool to execute searches
 4. Review and synthesize the search results
-5. Write a comprehensive report to `final_report.md` using write_file tool
+5. Write a comprehensive report to `research/final_report.md` using write_file tool
 
 SEARCH STRATEGY:
 - Generate diverse queries covering different aspects
@@ -405,7 +414,7 @@ SEARCH STRATEGY:
 - Cover multiple angles (technical, practical, historical, future)
 
 REPORT REQUIREMENTS:
-- Write directly to `final_report.md` (don't just describe it!)
+- Write directly to `research/final_report.md` (don't just describe it!)
 - Use clear markdown formatting
 - Include an overview, key findings, and conclusion
 - Cite sources with URLs in a Sources section
@@ -435,7 +444,7 @@ REPORT STRUCTURE:
 IMPORTANT:
 - Be thorough but efficient - this is quick research (target: 3-5 searches)
 - Synthesize information clearly and concisely
-- MUST write to final_report.md using write_file tool
+- MUST write to research/final_report.md using write_file tool
 - Include proper citations
 - Focus on accuracy and relevance
 """
@@ -464,7 +473,7 @@ Example TODO structure:
 [ ] Research subtopic A
 [ ] Research subtopic B
 [ ] Research subtopic C
-[ ] Write initial report to final_report.md
+[ ] Write initial report to research/final_report.md
 [ ] Get critique (HIGH/MEDIUM/LOW priorities)
 [ ] Follow-up research for HIGH + MEDIUM issues
 [ ] Update and finalize report in [language]
@@ -503,7 +512,7 @@ Based on the critique, do additional research ONLY for HIGH and MEDIUM priority 
 
 PHASE 4 - Write Final Report:
 After collecting all research findings (from PHASE 1) and addressing critique feedback (PHASE 3):
-- Write ONE integrated report to final_report.md
+- Write ONE integrated report to research/final_report.md
 - Synthesize all raw findings into cohesive prose
 - Remove duplicate information that appears in multiple sub-agent findings
 - Ensure all claims have inline citations [1], [2], etc.
@@ -511,7 +520,7 @@ After collecting all research findings (from PHASE 1) and addressing critique fe
 - Stay within the 3000-4000 word limit
 
 CRITICAL REQUIREMENT - FINAL REPORT:
-You MUST ALWAYS write a final report to `final_report.md` before you finish. This is NOT optional!
+You MUST ALWAYS write a final report to `research/final_report.md` before you finish. This is NOT optional!
 
 IMPORTANT - ONE INTEGRATED REPORT:
 - Write ONE cohesive report, not multiple concatenated reports
@@ -543,7 +552,7 @@ Write as if you ARE a subject matter expert, not an AI describing what it found.
 
 Only edit the file once at a time (if you call this tool in parallel, there may be conflicts).
 
-REMINDER: Before you finish your work, you MUST have created final_report.md. Do not mark your work as complete until this file exists!
+REMINDER: Before you finish your work, you MUST have created research/final_report.md. Do not mark your work as complete until this file exists!
 
 Here are instructions for writing the final report:
 
@@ -812,21 +821,31 @@ def ensure_report_exists(question, result, partial=False):
         result: Agent execution result (can be None)
         partial: Whether this is a partial report (error/interrupt case)
     """
+    # Ensure research folder exists
+    ensure_research_folder()
+    final_report_path = os.path.join(RESEARCH_FOLDER, "final_report.md")
+
     # Check if report already exists
-    if os.path.exists("final_report.md"):
-        console.print("[dim]✓ final_report.md already exists (created by agent)[/dim]")
+    if os.path.exists(final_report_path):
+        console.print(
+            f"[dim]✓ {final_report_path} already exists (created by agent)[/dim]"
+        )
         return
 
     # Check if agent wrote to a different file (common mistake)
-    possible_reports = glob.glob("*.md") + glob.glob("/tmp/*.md")
-    skip_files = ["README.md", "CLAUDE.md", "requirements.md"]
+    possible_reports = (
+        glob.glob("*.md")
+        + glob.glob("/tmp/*.md")
+        + glob.glob(f"{RESEARCH_FOLDER}/*.md")
+    )
+    skip_files = ["README.md", "CLAUDE.md", "requirements.md", "final_report.md"]
     recent_md_files = [
         f
         for f in possible_reports
         if os.path.isfile(f)
         and os.path.getmtime(f) > time.time() - 300  # Last 5 minutes
         and os.path.basename(f) not in skip_files
-        and not f.startswith("test_")
+        and not os.path.basename(f).startswith("test_")
     ]
 
     # If we found a recent .md file, use it instead of generating emergency report
@@ -838,12 +857,12 @@ def ensure_report_exists(question, result, partial=False):
         console.print(
             f"\n[bold yellow]⚠️  Agent schreef naar verkeerde locatie: {found_report}[/bold yellow]"
         )
-        console.print("[green]   → Kopiëren naar final_report.md...[/green]")
+        console.print(f"[green]   → Kopiëren naar {final_report_path}...[/green]")
 
         # Copy the found report to final_report.md
         with open(found_report, "r", encoding="utf-8") as src:
             content = src.read()
-        with open("final_report.md", "w", encoding="utf-8") as dst:
+        with open(final_report_path, "w", encoding="utf-8") as dst:
             dst.write(content)
 
         console.print(f"[green]✓ Rapport gekopieerd van {found_report}[/green]")
@@ -851,7 +870,7 @@ def ensure_report_exists(question, result, partial=False):
 
     # No recent file found - generate emergency report
     console.print(
-        "\n[bold yellow]⚠️  Agent did not create final_report.md - generating emergency report...[/bold yellow]"
+        f"\n[bold yellow]⚠️  Agent did not create {final_report_path} - generating emergency report...[/bold yellow]"
     )
     console.print("[yellow]   Mogelijke oorzaken:[/yellow]")
     console.print(
@@ -870,7 +889,7 @@ def ensure_report_exists(question, result, partial=False):
     report = create_emergency_report(question, research_content, partial)
 
     # Write report to file
-    with open("final_report.md", "w") as f:
+    with open(final_report_path, "w") as f:
         f.write(report)
 
     console.print("[green]✓ Emergency report created from available research[/green]")
@@ -907,18 +926,22 @@ def generate_report_filename(question: str) -> str:
 
 def rename_final_report(question: str) -> str:
     """
-    Rename final_report.md to a question-based filename
+    Rename final_report.md to a question-based filename in research folder
 
     Args:
         question: The research question
 
     Returns:
-        str: The new filename, or None if rename failed
+        str: The new filename (full path), or None if rename failed
     """
-    if not os.path.exists("final_report.md"):
+    ensure_research_folder()
+    final_report_path = os.path.join(RESEARCH_FOLDER, "final_report.md")
+
+    if not os.path.exists(final_report_path):
         return None
 
-    new_filename = generate_report_filename(question)
+    base_filename = generate_report_filename(question)
+    new_filename = os.path.join(RESEARCH_FOLDER, base_filename)
 
     # If file already exists, add a number
     base_name = new_filename[:-3]  # Remove .md
@@ -928,11 +951,11 @@ def rename_final_report(question: str) -> str:
         counter += 1
 
     try:
-        os.rename("final_report.md", new_filename)
+        os.rename(final_report_path, new_filename)
         return new_filename
     except Exception as e:
         console.print(f"[yellow]⚠️  Could not rename report: {e}[/yellow]")
-        return "final_report.md"
+        return final_report_path
 
 
 # ══════════════════════════════════════════════════════════════
@@ -960,7 +983,9 @@ def run_quick_research(question: str, max_searches: int = 5):
     start_time = time.time()
 
     # Clean up files from previous runs to avoid confusion
-    for old_file in ["question.txt", "final_report.md"]:
+    ensure_research_folder()
+    cleanup_files = ["question.txt", os.path.join(RESEARCH_FOLDER, "final_report.md")]
+    for old_file in cleanup_files:
         if os.path.exists(old_file):
             os.remove(old_file)
             console.print(f"[dim]Removed old {old_file}[/dim]")
@@ -1130,29 +1155,11 @@ def run_quick_research(question: str, max_searches: int = 5):
         # Rename report to question-based filename
         final_filename = rename_final_report(question)
 
-        # Show report preview
+        # Show report location
         if final_filename and os.path.exists(final_filename):
             console.print(
                 f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]"
             )
-
-            with open(final_filename, "r") as f:
-                content = f.read()
-                preview = (
-                    content[:500]
-                    + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]"
-                    if len(content) > 500
-                    else content
-                )
-
-                console.print("\n")
-                console.print(
-                    Panel(
-                        Markdown(preview),
-                        title="[bold cyan]📄 Rapport Preview[/bold cyan]",
-                        border_style="cyan",
-                    )
-                )
 
         return {
             "messages": messages,
@@ -1191,7 +1198,9 @@ def run_research(question: str, recursion_limit: int = 100):
     start_time = time.time()
 
     # Clean up files from previous runs to avoid confusion
-    for old_file in ["question.txt", "final_report.md"]:
+    ensure_research_folder()
+    cleanup_files = ["question.txt", os.path.join(RESEARCH_FOLDER, "final_report.md")]
+    for old_file in cleanup_files:
         if os.path.exists(old_file):
             os.remove(old_file)
             console.print(f"[dim]Removed old {old_file}[/dim]")
@@ -1390,25 +1399,6 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
             console.print(
                 f"\n[bold green]✓ Rapport opgeslagen als:[/bold green] [link=file://{final_filename}]{final_filename}[/link]"
             )
-
-            # Show preview of report
-            with open(final_filename, "r") as f:
-                content = f.read()
-                preview = (
-                    content[:500]
-                    + f"\n\n[dim]...(zie {final_filename} voor volledig rapport)[/dim]"
-                    if len(content) > 500
-                    else content
-                )
-
-                console.print("\n")
-                console.print(
-                    Panel(
-                        Markdown(preview),
-                        title="[bold cyan]📄 Rapport Preview[/bold cyan]",
-                        border_style="cyan",
-                    )
-                )
         else:
             console.print(
                 "\n[bold red]⚠️  WAARSCHUWING: Geen rapport gevonden![/bold red]"

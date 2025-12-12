@@ -9,6 +9,15 @@ import pytest
 import os
 from unittest.mock import Mock, patch
 
+# Report path constants (must match research.py)
+RESEARCH_FOLDER = "research"
+FINAL_REPORT_PATH = os.path.join(RESEARCH_FOLDER, "final_report.md")
+
+
+def setup_module():
+    """Ensure research folder exists before tests."""
+    os.makedirs(RESEARCH_FOLDER, exist_ok=True)
+
 
 def test_ensure_report_exists_with_no_report():
     """Test that ensure_report_exists creates report when missing"""
@@ -16,9 +25,16 @@ def test_ensure_report_exists_with_no_report():
     from research import ensure_report_exists
 
     # Remove report and any test-related md files that could interfere
-    for f in ["final_report.md"] + glob.glob("*question*.md") + glob.glob("/tmp/*.md"):
-        if os.path.exists(f):
-            os.remove(f)
+    cleanup_patterns = [
+        FINAL_REPORT_PATH,
+        os.path.join(RESEARCH_FOLDER, "*question*.md"),
+        "*question*.md",
+        "/tmp/*.md",
+    ]
+    for pattern in cleanup_patterns:
+        for f in glob.glob(pattern):
+            if os.path.exists(f):
+                os.remove(f)
 
     # Mock result with some research content
     mock_result = {
@@ -34,17 +50,17 @@ def test_ensure_report_exists_with_no_report():
     ensure_report_exists("What is Python?", mock_result, partial=False)
 
     # Verify report was created
-    assert os.path.exists("final_report.md"), "Report should be created"
+    assert os.path.exists(FINAL_REPORT_PATH), "Report should be created"
 
     # Verify content
-    with open("final_report.md", "r") as f:
+    with open(FINAL_REPORT_PATH, "r") as f:
         content = f.read()
         assert "What is Python?" in content
         assert "Research Report" in content
         assert "research finding" in content.lower()
 
     # Cleanup
-    os.remove("final_report.md")
+    os.remove(FINAL_REPORT_PATH)
 
 
 def test_ensure_report_exists_with_existing_report():
@@ -53,7 +69,8 @@ def test_ensure_report_exists_with_existing_report():
 
     # Create existing report
     original_content = "# Original Report\n\nThis is the original content."
-    with open("final_report.md", "w") as f:
+    os.makedirs(RESEARCH_FOLDER, exist_ok=True)
+    with open(FINAL_REPORT_PATH, "w") as f:
         f.write(original_content)
 
     # Call ensure_report_exists
@@ -61,12 +78,12 @@ def test_ensure_report_exists_with_existing_report():
     ensure_report_exists("Test question", mock_result, partial=False)
 
     # Verify original report is unchanged
-    with open("final_report.md", "r") as f:
+    with open(FINAL_REPORT_PATH, "r") as f:
         content = f.read()
         assert content == original_content, "Existing report should not be overwritten"
 
     # Cleanup
-    os.remove("final_report.md")
+    os.remove(FINAL_REPORT_PATH)
 
 
 def test_ensure_report_exists_with_no_research():
@@ -75,26 +92,33 @@ def test_ensure_report_exists_with_no_research():
     from research import ensure_report_exists
 
     # Remove report and any test-related md files that could interfere
-    for f in ["final_report.md"] + glob.glob("*question*.md") + glob.glob("/tmp/*.md"):
-        if os.path.exists(f):
-            os.remove(f)
+    cleanup_patterns = [
+        FINAL_REPORT_PATH,
+        os.path.join(RESEARCH_FOLDER, "*question*.md"),
+        "*question*.md",
+        "/tmp/*.md",
+    ]
+    for pattern in cleanup_patterns:
+        for f in glob.glob(pattern):
+            if os.path.exists(f):
+                os.remove(f)
 
     # Call with None result (no research)
     ensure_report_exists("Test question", None, partial=True)
 
     # Verify report was created
-    assert os.path.exists("final_report.md"), (
+    assert os.path.exists(FINAL_REPORT_PATH), (
         "Report should be created even without research"
     )
 
     # Verify it indicates no content
-    with open("final_report.md", "r") as f:
+    with open(FINAL_REPORT_PATH, "r") as f:
         content = f.read()
         assert "Partial Research Report" in content
         assert "Test question" in content
 
     # Cleanup
-    os.remove("final_report.md")
+    os.remove(FINAL_REPORT_PATH)
 
 
 def test_extract_research_from_messages():
@@ -171,27 +195,27 @@ def test_report_guarantee_integration():
     import research
 
     # Remove any existing report
-    if os.path.exists("final_report.md"):
-        os.remove("final_report.md")
+    if os.path.exists(FINAL_REPORT_PATH):
+        os.remove(FINAL_REPORT_PATH)
 
     # Initialize search tool
     research.search_tool = HybridSearchTool(provider="multi-search")
 
     # Mock agent to return immediately without creating report
-    # Also mock rename_final_report to keep the file as final_report.md
+    # Also mock rename_final_report to keep the file as research/final_report.md
     with patch("research.agent.stream", return_value=[]):
-        with patch("research.rename_final_report", return_value="final_report.md"):
+        with patch("research.rename_final_report", return_value=FINAL_REPORT_PATH):
             # Run research with mock
             run_research("Test question", recursion_limit=50)
 
     # CRITICAL: Verify report exists (this is the guarantee!)
-    assert os.path.exists("final_report.md"), (
+    assert os.path.exists(FINAL_REPORT_PATH), (
         "Report MUST exist after run_research, regardless of agent behavior"
     )
 
     # Cleanup
-    if os.path.exists("final_report.md"):
-        os.remove("final_report.md")
+    if os.path.exists(FINAL_REPORT_PATH):
+        os.remove(FINAL_REPORT_PATH)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import argparse
 import glob
 import os
 import time
@@ -1564,7 +1565,54 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
             raise
 
 
-if __name__ == "__main__":
+def parse_args():
+    """Parse command-line arguments for non-interactive mode."""
+    parser = argparse.ArgumentParser(
+        description="AI Research Agent - Deep research powered by Claude & DeepAgents",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python research.py                           # Interactive mode
+  python research.py "Your question here"      # Quick mode with question
+  python research.py -d "Your question"        # Deep research mode
+  python research.py -d -i 300 "Your question" # Deep mode with 300 iterations
+        """,
+    )
+    parser.add_argument(
+        "question",
+        nargs="?",
+        help="Research question (if not provided, runs in interactive mode)",
+    )
+    parser.add_argument(
+        "-d",
+        "--deep",
+        action="store_true",
+        help="Use deep research mode (default: quick mode)",
+    )
+    parser.add_argument(
+        "-i",
+        "--iterations",
+        type=int,
+        default=200,
+        help="Max iterations for deep research (default: 200, range: 50-500)",
+    )
+    parser.add_argument(
+        "-p",
+        "--provider",
+        choices=["tavily", "multi-search", "auto"],
+        default="auto",
+        help="Search provider (default: auto)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode",
+    )
+    return parser.parse_args()
+
+
+def run_interactive():
+    """Run in interactive mode with prompts."""
     # Print welcome banner
     console.print("\n")
     console.print(
@@ -1611,6 +1659,7 @@ if __name__ == "__main__":
         )
 
     # Recursion limit configuration (only for deep research)
+    recursion_limit = 200
     if not is_quick_mode:
         console.print("[bold]Agent configuratie:[/bold]")
         console.print(
@@ -1641,6 +1690,7 @@ if __name__ == "__main__":
         console.print(f"[dim]Recursion limit: {recursion_limit}[/dim]\n")
 
     # Provider selection (only for Deep Research mode)
+    global search_tool
     if is_quick_mode:
         # Quick mode: automatically use Multi-Search (free tier, good enough for quick queries)
         selected_provider = "multi-search"
@@ -1745,3 +1795,52 @@ if __name__ == "__main__":
             run_research(question, recursion_limit=recursion_limit)
     else:
         console.print("\n[yellow]Onderzoek geannuleerd.[/yellow]\n")
+
+
+def run_cli(args):
+    """Run in CLI mode with command-line arguments."""
+    global search_tool
+
+    # Validate iterations
+    iterations = max(50, min(500, args.iterations))
+
+    # Initialize search tool
+    search_tool = HybridSearchTool(provider=args.provider)
+
+    # Set debug mode
+    tracker.debug_mode = args.debug or os.getenv("DEBUG", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    # Print header
+    mode = "Deep Research" if args.deep else "Quick Research"
+    console.print("\n")
+    console.print(
+        Panel.fit(
+            f"[bold cyan]AI Research Agent[/bold cyan]\n"
+            f"[dim]{mode} | Provider: {args.provider} | Iterations: {iterations}[/dim]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
+
+    console.print(f"\n[bold]Vraag:[/bold] {args.question}\n")
+
+    # Run research
+    if args.deep:
+        run_research(args.question, recursion_limit=iterations)
+    else:
+        run_quick_research(args.question, max_searches=5)
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    if args.question:
+        # CLI mode - run with provided question
+        run_cli(args)
+    else:
+        # Interactive mode
+        run_interactive()

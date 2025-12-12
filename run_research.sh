@@ -6,6 +6,10 @@
 #   ./run_research.sh "Your research question here"
 #   ./run_research.sh  # Will prompt for question
 #
+# Options (via environment variables):
+#   ITERATIONS=300 ./run_research.sh "question"  # Custom iterations
+#   PROVIDER=tavily ./run_research.sh "question" # Use Tavily provider
+#
 
 set -e
 
@@ -30,21 +34,21 @@ if [ -z "$QUESTION" ]; then
     exit 1
 fi
 
+# Configuration with defaults
+ITERATIONS="${ITERATIONS:-200}"
+PROVIDER="${PROVIDER:-auto}"
+
 echo ""
 echo "=========================================="
 echo "Starting Deep Research"
 echo "=========================================="
 echo "Question: $QUESTION"
+echo "Iterations: $ITERATIONS"
+echo "Provider: $PROVIDER"
 echo ""
 
-# Run research with deep mode, auto provider selection
-# Using heredoc to provide answers to prompts
-python research.py << EOF
-$QUESTION
-deep
-auto
-200
-EOF
+# Run research with CLI arguments (non-interactive mode)
+python research.py --deep --iterations "$ITERATIONS" --provider "$PROVIDER" "$QUESTION"
 
 echo ""
 echo "=========================================="

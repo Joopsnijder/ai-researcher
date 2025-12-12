@@ -163,6 +163,90 @@ class HybridSearchTool:
 search_tool = None
 
 
+# Live search status display configuration
+MAX_SEARCH_HISTORY = 5  # Number of recent searches to show in live display
+
+
+class SearchStatusDisplay:
+    """Manages a live-updating display of recent search activity."""
+
+    def __init__(self, max_history: int = MAX_SEARCH_HISTORY):
+        self.max_history = max_history
+        self.recent_searches: list[dict] = []
+        self.live: Live | None = None
+        self.enabled = True
+
+    def start(self):
+        """Start the live display."""
+        if self.enabled and self.live is None:
+            self.live = Live(
+                self._render(),
+                console=console,
+                refresh_per_second=4,
+                transient=True,  # Remove display when stopped
+            )
+            self.live.start()
+
+    def stop(self):
+        """Stop the live display."""
+        if self.live is not None:
+            self.live.stop()
+            self.live = None
+
+    def add_search(
+        self,
+        search_num: int,
+        query: str,
+        results_count: int,
+        provider: str,
+        cached: bool = False,
+    ):
+        """Add a search result to the display."""
+        # Truncate query for display
+        display_query = query[:55] + "..." if len(query) > 55 else query
+
+        self.recent_searches.append(
+            {
+                "num": search_num,
+                "query": display_query,
+                "results": results_count,
+                "provider": provider,
+                "cached": cached,
+            }
+        )
+
+        # Keep only the most recent searches
+        if len(self.recent_searches) > self.max_history:
+            self.recent_searches = self.recent_searches[-self.max_history :]
+
+        # Update live display if active
+        if self.live is not None:
+            self.live.update(self._render())
+
+    def _render(self):
+        """Render the search status panel."""
+        if not self.recent_searches:
+            content = "[dim]Wachten op zoekopdrachten...[/dim]"
+        else:
+            lines = []
+            for s in self.recent_searches:
+                cache_mark = " [green]✓[/green]" if s["cached"] else ""
+                line = f"[cyan]#{s['num']:3d}[/cyan] {s['query']} [green]→ {s['results']}[/green] [dim]({s['provider']})[/dim]{cache_mark}"
+                lines.append(line)
+            content = "\n".join(lines)
+
+        return Panel(
+            content,
+            title=f"[bold cyan]🔍 Zoekactiviteit[/bold cyan] [dim](laatste {self.max_history})[/dim]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+
+
+# Global search status display
+search_display = SearchStatusDisplay()
+
+
 # Global state to track agent activity
 class AgentTracker:
     def __init__(self):
@@ -267,18 +351,63 @@ def create_todo_panel(todos):
     )
 
 
+def create_combined_status_panel(todos=None):
+    """Create a combined panel showing both search activity and todos."""
+
+    panels = []
+
+    # Search activity panel (always show during research)
+    if search_display.recent_searches:
+        search_lines = []
+        for s in search_display.recent_searches:
+            cache_mark = " [green]✓[/green]" if s["cached"] else ""
+            line = f"[cyan]#{s['num']:3d}[/cyan] {s['query']} [green]→ {s['results']}[/green] [dim]({s['provider']})[/dim]{cache_mark}"
+            search_lines.append(line)
+        search_content = "\n".join(search_lines)
+    else:
+        search_content = "[dim]Wachten op zoekopdrachten...[/dim]"
+
+    search_panel = Panel(
+        search_content,
+        title=f"[bold cyan]🔍 Zoekactiviteit[/bold cyan] [dim](laatste {search_display.max_history})[/dim]",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    panels.append(search_panel)
+
+    # Todo panel (if there are todos)
+    if todos:
+        todo_panel = create_todo_panel(todos)
+        if todo_panel:
+            panels.append(todo_panel)
+
+    # Return a group of panels stacked vertically
+    from rich.console import Group
+
+    return Group(*panels)
+
+
 def display_todos(todos):
     """Display TODO list - uses in-place update if Live is active"""
-    panel = create_todo_panel(todos)
-    if panel is None:
-        return
+    # Store todos for combined display
+    tracker.current_todos = todos
 
-    # If Live display is active, update it in-place
+    # If Live display is active, update it with combined panel
     if tracker.live_display is not None:
-        tracker.live_display.update(panel)
+        combined = create_combined_status_panel(todos)
+        tracker.live_display.update(combined)
     else:
-        # Fallback: print normally
-        console.print(panel)
+        # Fallback: print todo panel normally
+        panel = create_todo_panel(todos)
+        if panel:
+            console.print(panel)
+
+
+def update_search_display():
+    """Update the live display with current search status."""
+    if tracker.live_display is not None:
+        combined = create_combined_status_panel(tracker.current_todos)
+        tracker.live_display.update(combined)
 
 
 # Search tool to use to do research
@@ -295,24 +424,29 @@ def internet_search(
     # Use the global search_tool
     search_docs = search_tool.search(query, max_results=max_results, topic=topic)
 
-    # Show compact search result on one line
+    # Extract search result info
     if isinstance(search_docs, dict) and "results" in search_docs:
         results_count = len(search_docs["results"])
-        # Truncate query if too long
-        display_query = query[:60] + "..." if len(query) > 60 else query
         provider_name = search_docs.get("_actual_provider", "Unknown")
         cache_hit = search_docs.get("_cache_hit", False)
         if cache_hit:
             tracker.cache_hits += 1
-        cache_indicator = " [green]✓ CACHED[/green]" if cache_hit else ""
-        console.print(
-            f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [green]→ {results_count} resultaten[/green] [dim]({provider_name})[/dim]{cache_indicator}"
-        )
     else:
-        display_query = query[:60] + "..." if len(query) > 60 else query
-        console.print(
-            f"[cyan]🔍 [#{search_num}][/cyan] {display_query} [yellow]→ geen resultaten[/yellow]"
-        )
+        results_count = 0
+        provider_name = "Unknown"
+        cache_hit = False
+
+    # Update the search display state
+    search_display.add_search(
+        search_num=search_num,
+        query=query,
+        results_count=results_count,
+        provider=provider_name,
+        cached=cache_hit,
+    )
+
+    # Update the live display with new search info
+    update_search_display()
 
     return search_docs
 
@@ -1432,8 +1566,16 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
     console.print("\n[yellow]Agent gestart...[/yellow]\n")
 
-    # Start Live display for in-place todo updates
-    tracker.live_display = Live(console=console, refresh_per_second=4, transient=False)
+    # Reset search display for new research session
+    search_display.recent_searches = []
+
+    # Start Live display for in-place status updates (search + todos)
+    tracker.live_display = Live(
+        create_combined_status_panel(),
+        console=console,
+        refresh_per_second=4,
+        transient=False,
+    )
     tracker.live_display.start()
 
     try:

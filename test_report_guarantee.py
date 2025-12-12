@@ -328,6 +328,80 @@ def test_tracker_iteration_fields_exist():
     assert tracker.report_triggered is False, "report_triggered should default to False"
 
 
+def test_detect_language_dutch():
+    """Test Dutch language detection"""
+    from research import detect_language
+
+    dutch_text = (
+        "De organisatie heeft een nieuwe strategie voor het implementeren van AI"
+    )
+    assert detect_language(dutch_text) == "nl"
+
+
+def test_detect_language_english():
+    """Test English language detection"""
+    from research import detect_language
+
+    english_text = "The organization has a new strategy for implementing AI"
+    assert detect_language(english_text) == "en"
+
+
+def test_detect_language_mixed_defaults_english():
+    """Test that mixed/unclear text defaults to English"""
+    from research import detect_language
+
+    mixed_text = "AI agents transform business processes"
+    assert detect_language(mixed_text) == "en"
+
+
+def test_refine_emergency_report_with_llm_returns_structured():
+    """Test that LLM refinement returns structured output when mocked"""
+    from research import refine_emergency_report_with_llm
+
+    mock_response_text = """## Management Samenvatting
+Dit is een test samenvatting.
+
+## Bevindingen
+Test bevindingen.
+
+## Conclusie
+Test conclusie."""
+
+    with patch("anthropic.Anthropic") as mock_anthropic:
+        mock_response = Mock()
+        mock_response.content = [Mock(text=mock_response_text)]
+        mock_anthropic.return_value.messages.create.return_value = mock_response
+
+        result = refine_emergency_report_with_llm(
+            "Test vraag", "Dit zijn ruwe bevindingen met voldoende content " * 50
+        )
+
+        assert result is not None
+        assert "Management Samenvatting" in result
+
+
+def test_refine_emergency_report_with_llm_returns_none_for_short_content():
+    """Test that LLM refinement returns None for insufficient content"""
+    from research import refine_emergency_report_with_llm
+
+    result = refine_emergency_report_with_llm("Test vraag", "Short")
+    assert result is None
+
+
+def test_refine_emergency_report_with_llm_handles_exception():
+    """Test that LLM refinement handles exceptions gracefully"""
+    from research import refine_emergency_report_with_llm
+
+    with patch("anthropic.Anthropic") as mock_anthropic:
+        mock_anthropic.return_value.messages.create.side_effect = Exception("API Error")
+
+        result = refine_emergency_report_with_llm(
+            "Test vraag", "Voldoende content voor de test " * 50
+        )
+
+        assert result is None
+
+
 if __name__ == "__main__":
     print("Running report guarantee tests...")
     pytest.main([__file__, "-v"])

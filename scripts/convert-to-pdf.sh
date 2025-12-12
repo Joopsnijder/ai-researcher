@@ -76,9 +76,16 @@ titlepage-rule-height: 2
 toc: true
 toc-own-page: true
 numbersections: true
-colorlinks: true
+colorlinks: false
+disable-header-and-footer: true
 lang: "nl"
 geometry: "margin=2.5cm"
+header-includes:
+  - \usepackage{fancyhdr}
+  - \pagestyle{fancy}
+  - \fancyhf{}
+  - \fancyfoot[C]{\thepage}
+  - \renewcommand{\headrulewidth}{0pt}
 ---
 
 EOF

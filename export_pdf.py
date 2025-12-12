@@ -97,42 +97,64 @@ def get_latest_report() -> str | None:
     return md_files[0]
 
 
-def has_pdflatex() -> bool:
-    """Check if pdflatex is available for pandoc."""
-    return shutil.which("pdflatex") is not None
+def get_pdf_engine() -> str | None:
+    """Get the best available PDF engine for pandoc.
+
+    Prefers xelatex (better Unicode support) over pdflatex.
+    """
+    if shutil.which("xelatex"):
+        return "xelatex"
+    if shutil.which("pdflatex"):
+        return "pdflatex"
+    return None
 
 
-def convert_with_pandoc(md_file: str, pdf_path: str) -> bool:
-    """Try to convert using pandoc + pdflatex."""
+def convert_with_pandoc(md_file: str, pdf_path: str) -> tuple[bool, str]:
+    """Try to convert using pandoc + LaTeX engine.
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    pdf_engine = get_pdf_engine()
+    if not pdf_engine:
+        return False, "No LaTeX engine found (xelatex or pdflatex required)"
+
     try:
-        result = subprocess.run(
-            [
-                "pandoc",
-                md_file,
-                "-o",
-                pdf_path,
-                "--pdf-engine=pdflatex",
-                "-V",
-                "geometry:margin=2.5cm",
-                "-V",
-                "fontsize=11pt",
-                "-V",
-                "documentclass=article",
-                "--toc",
-                "--toc-depth=2",
-                "-V",
-                "colorlinks=true",
-                "-V",
-                "linkcolor=blue",
-                "-V",
-                "urlcolor=blue",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+        cmd = [
+            "pandoc",
+            md_file,
+            "-o",
+            pdf_path,
+            f"--pdf-engine={pdf_engine}",
+            "-V",
+            "geometry:margin=2.5cm",
+            "-V",
+            "fontsize=11pt",
+            "-V",
+            "documentclass=article",
+            "--toc",
+            "--toc-depth=2",
+            "-V",
+            "colorlinks=true",
+            "-V",
+            "linkcolor=blue",
+            "-V",
+            "urlcolor=blue",
+        ]
+
+        # Add font settings for xelatex (better Unicode support)
+        if pdf_engine == "xelatex":
+            cmd.extend(["-V", "mainfont=Helvetica Neue"])
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            return True, ""
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            return False, error_msg
+    except Exception as e:
+        return False, str(e)
 
 
 def convert_to_html(md_file: str, output_dir: str | None = None) -> str | None:
@@ -215,13 +237,16 @@ def convert_to_pdf(md_file: str, output_dir: str | None = None) -> str | None:
 
     print(f"Converting: {md_file}")
 
-    # Try pandoc + pdflatex first
-    if shutil.which("pandoc") and has_pdflatex():
-        print("Using pandoc with pdflatex...")
-        if convert_with_pandoc(md_file, pdf_path):
+    # Try pandoc + LaTeX engine first
+    pdf_engine = get_pdf_engine()
+    if shutil.which("pandoc") and pdf_engine:
+        print(f"Using pandoc with {pdf_engine}...")
+        success, error_msg = convert_with_pandoc(md_file, pdf_path)
+        if success:
             print(f"\n✓ PDF created: {pdf_path}")
             return pdf_path
-        print("Pandoc conversion failed, falling back to HTML...")
+        print(f"Pandoc conversion failed: {error_msg}")
+        print("Falling back to HTML...")
 
     # Fallback: generate HTML and open in browser for manual PDF export
     html_path = convert_to_html(md_file, output_dir)

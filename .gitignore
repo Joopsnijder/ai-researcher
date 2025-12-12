@@ -54,3 +54,7 @@ docs/*.build.md
 docs/*-final.html
 docs/*-final.pdf
 docs/diagrams/
+
+# Research files
+research/*.md
+research/*.pdf

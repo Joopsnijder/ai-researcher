@@ -69,7 +69,7 @@ class HybridSearchTool:
             "_cache_hit": response.get("cache_hit", False),
         }
 
-    def search(self, query: str, max_results: int = 5, topic: str = "general"):
+    def search(self, query: str, max_results: int = 7, topic: str = "general"):
         """Execute search with selected provider"""
 
         if self.provider == "tavily":

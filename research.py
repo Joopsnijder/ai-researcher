@@ -1,7 +1,9 @@
+import glob
 import os
-import dotenv
-from typing import Literal
 import time
+from typing import Literal
+
+import dotenv
 
 from tavily import TavilyClient
 from multi_search_api import SmartSearchTool
@@ -11,6 +13,7 @@ from rich.table import Table
 from rich.markdown import Markdown
 from rich.rule import Rule
 from rich.prompt import Prompt
+from rich.live import Live
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
@@ -155,15 +158,17 @@ class AgentTracker:
         self.messages_count = 0
         self.file_operations = []
         self.current_todos = []
+        self.debug_mode = False
+        self.live_display = None  # Rich Live instance for in-place updates
 
 
 tracker = AgentTracker()
 
 
-def display_todos(todos):
-    """Display TODO list in a nice panel"""
+def create_todo_panel(todos):
+    """Create a todo panel (returns renderable, doesn't print)"""
     if not todos:
-        return
+        return None
 
     todo_table = Table(show_header=False, box=None, padding=(0, 1), expand=False)
     todo_table.add_column("Status", style="bold", width=3)
@@ -186,14 +191,26 @@ def display_todos(todos):
 
         todo_table.add_row(icon, f"{task_style}{content}[/]")
 
-    console.print(
-        Panel(
-            todo_table,
-            title="[bold cyan]📋 Taken[/bold cyan]",
-            border_style="cyan",
-            padding=(0, 1),
-        )
+    return Panel(
+        todo_table,
+        title="[bold cyan]📋 Taken[/bold cyan]",
+        border_style="cyan",
+        padding=(0, 1),
     )
+
+
+def display_todos(todos):
+    """Display TODO list - uses in-place update if Live is active"""
+    panel = create_todo_panel(todos)
+    if panel is None:
+        return
+
+    # If Live display is active, update it in-place
+    if tracker.live_display is not None:
+        tracker.live_display.update(panel)
+    else:
+        # Fallback: print normally
+        console.print(panel)
 
 
 # Search tool to use to do research
@@ -251,11 +268,38 @@ def track_file_operation(operation: str, filename: str):
     console.print(f"[bold green]📝 File {operation}:[/bold green] {filename}")
 
 
-sub_research_prompt = """You are a dedicated researcher. Your job is to conduct research based on the users questions.
+sub_research_prompt = """You are a dedicated researcher. Your job is to research ONE specific subtopic.
 
-Conduct thorough research and then reply to the user with a detailed answer to their question
+IMPORTANT OUTPUT FORMAT:
+- Return ONLY raw research findings (facts, statistics, sources)
+- Do NOT write a complete report or add markdown headers like "# ONDERZOEKSRAPPORT" or "## Section"
+- Keep your response CONCISE (maximum 1000 words)
+- Format as bullet points with inline citations
+- Include source URLs where available
 
-only your FINAL answer will be passed on to the user. They will have NO knowledge of anything except your final message, so your final report should be your final message!"""
+Your findings will be integrated into a larger report by the main agent. Do NOT structure it as a standalone report.
+
+Example of GOOD output:
+- AI agents have a 95% failure rate in enterprise deployments [1]
+- Average implementation cost: $50,000 - $200,000 for enterprise [2]
+- Only 25% of organizations achieve expected ROI [3]
+
+Sources:
+[1] [MIT Research](https://example.com/mit-research)
+[2] [Ampcome 2025](https://ampcome.com/ai-costs)
+[3] [BCG Report](https://bcg.com/ai-roi)
+
+IMPORTANT FORMATTING:
+- Use standard markdown bullet points (- or *), NOT special characters like •
+- Use numbered inline citations [1], [2], [3] in the text
+- List sources at the end with markdown links: [1] [Title](URL)
+
+Example of BAD output (DO NOT DO THIS):
+# ONDERZOEKSRAPPORT: AI Agent Challenges
+## Executive Summary
+Dit rapport behandelt...
+## Hoofdstuk 1
+..."""
 
 research_sub_agent = {
     "name": "research-agent",
@@ -427,14 +471,23 @@ Example TODO structure:
 
 The first thing you should do after planning is to write the original user question to `question.txt`.
 
+COMPACT REPORT RULES:
+- Target length: 3000-4000 words (DO NOT exceed 5000 words)
+- Research sub-agents return RAW FINDINGS (bullet points), not complete reports
+- YOU (the main agent) integrate all findings into ONE cohesive report
+- Remove redundancy - don't repeat the same information from different sub-agents
+- Focus on answering the question directly and concisely
+- Use clear, efficient language - avoid filler text and unnecessary elaboration
+
 RESEARCH WORKFLOW:
 
 PHASE 1 - Initial Research:
-Use the research-agent to conduct deep research on each subtopic. After each research-agent response, IMMEDIATELY update the report:
-- If final_report.md doesn't exist yet, create it with the initial findings
-- If it exists, use edit_file to ADD or REFINE content in the relevant section
-- DO NOT rewrite the entire report - only update the specific section being researched
-- Each section should be refined and expanded, not duplicated
+Use the research-agent to conduct deep research on each subtopic. The research-agent will return RAW FINDINGS (bullet points with sources), NOT a complete report.
+
+After receiving findings from each research-agent:
+- Collect and organize the raw findings
+- Wait until you have findings from ALL subtopics before writing the report
+- DO NOT write partial reports after each sub-agent - collect all findings first
 
 PHASE 2 - Critique:
 After initial research is complete, call the critique-agent. The critique will be structured as:
@@ -448,20 +501,23 @@ Based on the critique, do additional research ONLY for HIGH and MEDIUM priority 
 - Ignore LOW priority feedback completely
 - Focus specifically on what the critique identified as missing or incorrect
 
-PHASE 4 - Final Update:
-Update final_report.md to address the HIGH and MEDIUM priority feedback:
-- Use edit_file to modify specific sections, not rewrite the whole report
+PHASE 4 - Write Final Report:
+After collecting all research findings (from PHASE 1) and addressing critique feedback (PHASE 3):
+- Write ONE integrated report to final_report.md
+- Synthesize all raw findings into cohesive prose
+- Remove duplicate information that appears in multiple sub-agent findings
 - Ensure all claims have inline citations [1], [2], etc.
 - Verify the Sources section matches the inline citations
+- Stay within the 3000-4000 word limit
 
 CRITICAL REQUIREMENT - FINAL REPORT:
 You MUST ALWAYS write a final report to `final_report.md` before you finish. This is NOT optional!
 
-IMPORTANT - INCREMENTAL UPDATES:
-- NEVER rewrite the entire report from scratch after initial creation
-- Use edit_file to update specific sections
-- Each research finding should refine/expand existing content, not duplicate it
-- The report should grow and improve incrementally
+IMPORTANT - ONE INTEGRATED REPORT:
+- Write ONE cohesive report, not multiple concatenated reports
+- DO NOT copy-paste sub-agent responses directly into the report
+- Transform raw findings into well-structured prose with proper sections
+- Each section header should appear only ONCE in the entire report
 
 IMPORTANT - REPORT CONTENT RULES:
 The final report must contain ONLY the polished research findings. NEVER include:
@@ -469,10 +525,21 @@ The final report must contain ONLY the polished research findings. NEVER include
 - Internal planning notes or thinking
 - References to "write_todos" or task management
 - JSON or dictionary structures like {'content': ...}
-- Meta-commentary about your process (e.g., "Now I will compile...")
 - The original question repeated as plain text
 
-The report should read like a professional article or research paper.
+FORBIDDEN AGENT STATEMENTS (never write these in the report):
+- "Now I'll compile..." / "Now I will..."
+- "Let me analyze..." / "Let me summarize..."
+- "I will now..." / "I'm going to..."
+- "Based on my research..." / "In my analysis..."
+- "I found that..." / "I discovered..."
+- "The research shows..." (use passive: "Research shows...")
+- Any first-person references to yourself as the writer
+- Meta-commentary about your writing process
+- Incomplete sentences or placeholder text like "[to be added]"
+
+The report should read like a professional article written by a human researcher.
+Write as if you ARE a subject matter expert, not an AI describing what it found.
 
 Only edit the file once at a time (if you call this tool in parallel, there may be conflicts).
 
@@ -485,12 +552,39 @@ Here are instructions for writing the final report:
 CRITICAL: Make sure the answer is written in the same language as the human messages! If you make a todo plan - you should note in the plan what language the report should be in so you dont forget!
 Note: the language the report should be in is the language the QUESTION is in, not the language/country that the question is ABOUT.
 
+MANDATORY REPORT STRUCTURE:
+Every report MUST follow this exact structure:
+
+# [Titel gebaseerd op onderzoeksvraag]
+
+> **Onderzoeksvraag:** [De originele vraag hier]
+> **Type:** AI-gegenereerd onderzoeksrapport
+> **Bronnen geraadpleegd:** [tel het aantal unieke bronnen] bronnen
+> **Datum:** [huidige datum in YYYY-MM-DD format]
+
+## Management Samenvatting
+
+[Write 2-3 paragraphs summarizing the key findings and conclusions. This is the
+first thing readers see - make it impactful and concise. NO bullet points here,
+only flowing prose. Highlight the most important insights.]
+
+## [Content sections follow...]
+
+[The rest of the report with well-structured sections]
+
+## Bronnen
+
+[Numbered source list with markdown links]
+
+---
+
 Please create a detailed answer to the overall research brief that:
-1. Is well-organized with proper headings (# for title, ## for sections, ### for subsections)
-2. Includes specific facts and insights from the research
-3. References relevant sources using [Title](URL) format
-4. Provides a balanced, thorough analysis. Be as comprehensive as possible, and include all information that is relevant to the overall research question. People are using you for deep research and will expect detailed, comprehensive answers.
-5. Includes a "Sources" section at the end with all referenced links
+1. ALWAYS starts with the metadata header and Management Samenvatting as shown above
+2. Is well-organized with proper headings (# for title, ## for sections, ### for subsections)
+3. Includes specific facts and insights from the research
+4. References relevant sources using inline citations [1], [2], etc.
+5. Provides a balanced, thorough analysis
+6. Includes a "Bronnen" section at the end with all referenced links
 
 You can structure your report in a number of different ways. Here are some examples:
 
@@ -521,13 +615,34 @@ If you think you can answer the question with a single section, you can do that 
 REMEMBER: Section is a VERY fluid and loose concept. You can structure your report however you think is best, including in ways that are not listed above!
 Make sure that your sections are cohesive, and make sense for the reader.
 
-For each section of the report, do the following:
+WRITING STYLE - PROSE, NOT BULLET LISTS:
+- Write in PROSE (flowing paragraphs), NOT bullet point lists
+- Bullet points are ONLY acceptable for:
+  - Short lists of exactly 3-5 items maximum
+  - Technical specifications or step-by-step processes
+- Default format is ALWAYS paragraphs with clear topic sentences
+- Each paragraph should develop ONE idea fully
+- Use transition words to connect ideas between paragraphs
+
+BAD EXAMPLE (avoid this):
+- Challenge 1: Cost issues affect many organizations
+- Challenge 2: Technical complexity is high
+- Challenge 3: Skill gaps are common
+
+GOOD EXAMPLE (do this instead):
+"The most significant challenge facing AI agent implementations is cost
+management. Organizations frequently underestimate the total cost of
+ownership, which extends far beyond initial licensing fees. Technical
+complexity compounds these cost issues, as integrating agents with
+existing systems requires specialized expertise that many teams lack."
+
+For each section of the report:
 - Use simple, clear language
-- Use ## for section title (Markdown format) for each section of the report
-- Do NOT ever refer to yourself as the writer of the report. This should be a professional report without any self-referential language. 
-- Do not say what you are doing in the report. Just write the report without any commentary from yourself.
-- Each section should be as long as necessary to deeply answer the question with the information you have gathered. It is expected that sections will be fairly long and verbose. You are writing a deep research report, and users will expect a thorough answer.
-- Use bullet points to list out information when appropriate, but by default, write in paragraph form.
+- Use ## for section titles (Markdown format)
+- Do NOT refer to yourself as the writer - this is a professional report
+- Do not describe what you are doing - just write the content directly
+- Each section should be comprehensive with flowing paragraphs
+- Transform research findings into cohesive narrative prose
 
 REMEMBER:
 The brief and research may be in English, but you need to translate this information to the right language when writing the final answer.
@@ -702,8 +817,48 @@ def ensure_report_exists(question, result, partial=False):
         console.print("[dim]✓ final_report.md already exists (created by agent)[/dim]")
         return
 
+    # Check if agent wrote to a different file (common mistake)
+    possible_reports = glob.glob("*.md") + glob.glob("/tmp/*.md")
+    skip_files = ["README.md", "CLAUDE.md", "requirements.md"]
+    recent_md_files = [
+        f
+        for f in possible_reports
+        if os.path.isfile(f)
+        and os.path.getmtime(f) > time.time() - 300  # Last 5 minutes
+        and os.path.basename(f) not in skip_files
+        and not f.startswith("test_")
+    ]
+
+    # If we found a recent .md file, use it instead of generating emergency report
+    if recent_md_files:
+        # Sort by modification time, newest first
+        recent_md_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+        found_report = recent_md_files[0]
+
+        console.print(
+            f"\n[bold yellow]⚠️  Agent schreef naar verkeerde locatie: {found_report}[/bold yellow]"
+        )
+        console.print("[green]   → Kopiëren naar final_report.md...[/green]")
+
+        # Copy the found report to final_report.md
+        with open(found_report, "r", encoding="utf-8") as src:
+            content = src.read()
+        with open("final_report.md", "w", encoding="utf-8") as dst:
+            dst.write(content)
+
+        console.print(f"[green]✓ Rapport gekopieerd van {found_report}[/green]")
+        return
+
+    # No recent file found - generate emergency report
     console.print(
         "\n[bold yellow]⚠️  Agent did not create final_report.md - generating emergency report...[/bold yellow]"
+    )
+    console.print("[yellow]   Mogelijke oorzaken:[/yellow]")
+    console.print(
+        "[dim]   • Agent dacht klaar te zijn zonder bestand te schrijven[/dim]"
+    )
+    console.print(
+        "[dim]   • Recursion limit bereikt voordat rapport werd geschreven[/dim]"
     )
 
     # Extract any research from agent messages
@@ -1061,6 +1216,10 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
 
     console.print("\n[yellow]Agent gestart...[/yellow]\n")
 
+    # Start Live display for in-place todo updates
+    tracker.live_display = Live(console=console, refresh_per_second=4, transient=False)
+    tracker.live_display.start()
+
     try:
         # Stream the agent's work with recursion limit
         # This prevents infinite loops by limiting the number of agent iterations
@@ -1096,9 +1255,8 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                         # Only display if todos changed
                         if new_todos != tracker.current_todos:
                             tracker.current_todos = new_todos
-                            console.print("\n")
+                            # In-place update via Live display
                             display_todos(new_todos)
-                            console.print()
 
                     if node_name == "model":
                         # Model is thinking
@@ -1113,15 +1271,19 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                                 if hasattr(msg, "content") and msg.content:
                                     # Check if it's a tool call
                                     if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                        for tool_call in msg.tool_calls:
-                                            tool_name = tool_call.get("name", "unknown")
-                                            # Don't show write_todos tool calls (we show the result instead)
-                                            if tool_name != "write_todos":
-                                                console.print(
-                                                    f"\n[bold magenta]🛠️  Tool aangeroepen:[/bold magenta] {tool_name}"
+                                        # Only show tool calls in debug mode
+                                        if tracker.debug_mode:
+                                            for tool_call in msg.tool_calls:
+                                                tool_name = tool_call.get(
+                                                    "name", "unknown"
                                                 )
-                                    # Check for text content
-                                    elif (
+                                                # Don't show write_todos tool calls (we show the result instead)
+                                                if tool_name != "write_todos":
+                                                    console.print(
+                                                        f"\n[bold magenta]🛠️  Tool aangeroepen:[/bold magenta] {tool_name}"
+                                                    )
+                                    # Check for text content (only in debug mode)
+                                    elif tracker.debug_mode and (
                                         isinstance(msg.content, str)
                                         and msg.content.strip()
                                     ):
@@ -1139,12 +1301,19 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                                             console.print(f"[dim]{preview}[/dim]")
 
                     elif "research-agent" in node_name or "critique-agent" in node_name:
-                        agent_type = (
-                            "Research" if "research" in node_name else "Critique"
-                        )
-                        console.print(
-                            f"\n[bold blue]🤖 {agent_type} Sub-agent actief[/bold blue]"
-                        )
+                        # Only show sub-agent activity in debug mode
+                        if tracker.debug_mode:
+                            agent_type = (
+                                "Research" if "research" in node_name else "Critique"
+                            )
+                            console.print(
+                                f"\n[bold blue]🤖 {agent_type} Sub-agent actief[/bold blue]"
+                            )
+
+        # Stop Live display before final output
+        if tracker.live_display is not None:
+            tracker.live_display.stop()
+            tracker.live_display = None
 
         # ==================================================================
         # DETERMINISTIC GUARANTEE: Ensure report exists after agent finishes
@@ -1259,6 +1428,10 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
         return result
 
     except KeyboardInterrupt:
+        # Stop Live display
+        if tracker.live_display is not None:
+            tracker.live_display.stop()
+            tracker.live_display = None
         console.print(
             "\n\n[bold red]⚠️  Onderzoek onderbroken door gebruiker[/bold red]"
         )
@@ -1269,6 +1442,10 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
             console.print(f"[dim]Partial report saved as: {final_filename}[/dim]")
         return None
     except Exception as e:
+        # Stop Live display
+        if tracker.live_display is not None:
+            tracker.live_display.stop()
+            tracker.live_display = None
         # Check for recursion limit error
         if "GraphRecursionError" in str(type(e).__name__) or "Recursion limit" in str(
             e
@@ -1415,11 +1592,17 @@ if __name__ == "__main__":
             f"\n[green]✓[/green] {provider_names[selected_provider]} geactiveerd\n"
         )
 
+    # Check for debug mode via environment variable
+    tracker.debug_mode = os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
+
     # Cache management menu (optional, for dev mode)
-    console.print("[dim]Dev tools beschikbaar: [c] Cache stats, [x] Clear cache[/dim]")
+    debug_indicator = " [dim](DEBUG AAN)[/dim]" if tracker.debug_mode else ""
+    console.print(
+        f"[dim]Dev tools: [c] Cache stats, [x] Clear cache, [d] Debug toggle{debug_indicator}[/dim]"
+    )
     utility_choice = Prompt.ask(
         "\n[bold cyan]Doorgaan of dev tool gebruiken?[/bold cyan]",
-        choices=["go", "c", "x"],
+        choices=["go", "c", "x", "d"],
         default="go",
     )
 
@@ -1439,6 +1622,14 @@ if __name__ == "__main__":
         ):
             search_tool.clear_cache()
         console.print()
+    elif utility_choice == "d":
+        # Toggle debug mode
+        tracker.debug_mode = not tracker.debug_mode
+        status = "[green]AAN[/green]" if tracker.debug_mode else "[red]UIT[/red]"
+        console.print(f"\n[bold]Debug mode:[/bold] {status}")
+        console.print(
+            "[dim]In debug mode worden tool calls en agent activiteit getoond.[/dim]\n"
+        )
 
     # Get question from user
     question = Prompt.ask(

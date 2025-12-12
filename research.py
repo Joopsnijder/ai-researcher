@@ -1075,9 +1075,15 @@ def refine_emergency_report_with_llm(
 
     client = Anthropic()
 
-    lang_instruction = (
-        "Schrijf in het Nederlands" if language == "nl" else "Write in English"
-    )
+    if language == "nl":
+        lang_instruction = """Schrijf in het Nederlands.
+BELANGRIJK: Gebruik Nederlandse titel-casing voor koppen (alleen eerste woord met hoofdletter, niet elk woord).
+Correct: "De veranderende rol van leiderschap"
+Fout: "De Veranderende Rol van Leiderschap" """
+    else:
+        lang_instruction = (
+            "Write in English (use standard English title case for headings)."
+        )
 
     refinement_prompt = f"""Je bent een professionele research editor. Een onderzoeksproces werd onderbroken
 voordat de agent het rapport kon schrijven. Je hebt ruwe research bevindingen uit agent messages.

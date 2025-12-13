@@ -493,9 +493,13 @@ IMPORTANT OUTPUT FORMAT:
 - Do NOT write a complete report or add markdown headers like "# ONDERZOEKSRAPPORT" or "## Section"
 - Keep your response CONCISE (maximum 1000 words)
 - Format as bullet points with inline citations
-- Include source URLs where available
+- Include source URLs in the Sources section ONLY (never in the text!)
 
 Your findings will be integrated into a larger report by the main agent. Do NOT structure it as a standalone report.
+
+CITATION FORMAT - CRITICAL:
+- In text: Use ONLY numbers like [1], [2], [3] - NEVER put URLs in the text!
+- Sources section: Each source on its OWN LINE with format: [number] [Title](URL)
 
 Example of GOOD output:
 - AI agents have a 95% failure rate in enterprise deployments [1]
@@ -507,17 +511,14 @@ Sources:
 [2] [Ampcome 2025](https://ampcome.com/ai-costs)
 [3] [BCG Report](https://bcg.com/ai-roi)
 
+Example of BAD output (DO NOT DO THIS - URLs in text):
+- AI agents fail often [https://example.com/article]
+- Cost is high [https://ampcome.com/ai-costs]
+
 IMPORTANT FORMATTING:
 - Use standard markdown bullet points (- or *), NOT special characters like •
-- Use numbered inline citations [1], [2], [3] in the text
-- List sources at the end with markdown links: [1] [Title](URL)
-
-Example of BAD output (DO NOT DO THIS):
-# ONDERZOEKSRAPPORT: AI Agent Challenges
-## Executive Summary
-Dit rapport behandelt...
-## Hoofdstuk 1
-..."""
+- ONLY use [1], [2], [3] in the text - NEVER [https://...]
+- Each source on a SEPARATE line in the Sources section"""
 
 research_sub_agent = {
     "name": "research-agent",
@@ -886,25 +887,34 @@ Format the report in clear markdown with proper structure and include source ref
 <Citation Rules>
 INLINE CITATIONS ARE MANDATORY! Every fact, statistic, claim, or piece of information from a source MUST have an inline citation.
 
-How to cite inline:
-- Use numbered references like [1], [2], [3] directly after the relevant sentence or paragraph
-- Example: "LangGraph supports cyclic workflows and state management [1]. CrewAI focuses on role-based agent collaboration [2]."
+CITATION FORMAT - CRITICAL:
+- In text: Use ONLY numbered references like [1], [2], [3]
+- NEVER put URLs directly in the text! Only use [1], [2], etc.
+- Example CORRECT: "LangGraph supports cyclic workflows [1]. CrewAI focuses on collaboration [2]."
+- Example WRONG: "LangGraph supports workflows [https://langchain.com/langgraph]."
 
-How to format the Sources section:
+SOURCES SECTION FORMAT:
 - End with ## Bronnen (or ## Sources in English reports)
-- Number sources sequentially: [1], [2], [3], etc.
-- Format each source as a markdown link: [number] [Title](URL)
-- Put each source on its own line for readability
-- Example:
-  [1] [LangGraph Documentation](https://langchain.com/langgraph)
-  [2] [CrewAI GitHub](https://github.com/crewai/crewai)
+- EACH source on its OWN LINE - never multiple sources on one line!
+- Format: [number] [Readable Title](URL)
+
+Example of CORRECT Sources section:
+## Bronnen
+
+[1] [LangGraph Documentation](https://langchain.com/langgraph)
+[2] [CrewAI GitHub](https://github.com/crewai/crewai)
+[3] [AI Agent Best Practices](https://example.com/best-practices)
+
+Example of WRONG Sources section (DO NOT DO THIS):
+## Bronnen
+[1] https://langchain.com/langgraph [2] https://github.com/crewai [3] https://example.com
 
 CRITICAL REQUIREMENTS:
 - EVERY paragraph that contains researched information must have at least one citation
 - Do NOT write facts without citing where they came from
-- If you cannot cite a source for a claim, do not include that claim
+- NEVER put URLs in the text - only [1], [2], [3] references
+- Each source MUST be on its own line in the Bronnen section
 - Match inline citation numbers [1], [2] to the Sources list at the end
-- Citations show credibility and allow readers to verify information
 </Citation Rules>
 </report_instructions>
 

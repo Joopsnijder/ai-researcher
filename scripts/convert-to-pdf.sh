@@ -94,12 +94,12 @@ header-includes:
 EOF
 
     # Append original content (skip existing frontmatter if present)
-    # Also strip emojis for professional PDF output
+    # Also strip emojis and fix malformed links for professional PDF output
     if has_frontmatter "$input_file"; then
         # Skip frontmatter (everything between first --- and second ---)
-        sed -n '/^---$/,/^---$/d; p' "$input_file" | strip_emojis >> "$temp_file"
+        sed -n '/^---$/,/^---$/d; p' "$input_file" | strip_emojis | fix_markdown_links >> "$temp_file"
     else
-        strip_emojis < "$input_file" >> "$temp_file"
+        strip_emojis < "$input_file" | fix_markdown_links >> "$temp_file"
     fi
 }
 
@@ -107,6 +107,13 @@ EOF
 strip_emojis() {
     # Remove common emojis and symbols that don't render well in LaTeX
     sed -E 's/[🔍🤖💡✓✔️❌⚠️ℹ️📊📈📉🎯🚀💼📝✨🔥💪🏆⭐️🌟📌🔗💬🗣️👉👆👇📋🗂️📁💾🔧⚙️🛠️📢🎉🎊🔒🔓✅❎🆗🆕🆓🔴🟢🟡⬜️⬛️🟦🟩🟨🟥▶️⏸️⏹️🔄↗️➡️⬅️⬆️⬇️↩️↪️•]//g'
+}
+
+# Fix malformed markdown links like [https://...] to proper clickable links
+fix_markdown_links() {
+    # Convert [https://url] or [http://url] to proper markdown links <url>
+    # This handles the case where URLs are wrapped in square brackets without link text
+    sed -E 's/\[(https?:\/\/[^]]+)\]/[\1](\1)/g'
 }
 
 # Main conversion function

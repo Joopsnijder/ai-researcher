@@ -13,7 +13,9 @@ import sys
 
 def test_prompts():
     """Controleer dat de prompts de juiste instructies bevatten."""
-    from research import research_instructions, sub_research_prompt
+    from research import research_instructions, load_prompt
+
+    sub_research_prompt = load_prompt("research_agent")
 
     print("\n=== PROMPT TESTS ===\n")
     errors = []

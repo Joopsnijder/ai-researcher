@@ -18,6 +18,9 @@ from research import (
     _fix_sources_section,
     _fix_inline_references,
     _extract_title_from_url,
+    calculate_cost,
+    AgentTracker,
+    ANTHROPIC_PRICING,
 )
 
 
@@ -349,3 +352,90 @@ class TestExtractTitleFromUrl:
         url = "https://example.com/" + "a" * 100
         title = _extract_title_from_url(url)
         assert len(title) <= 60 or "..." in title or "example" in title.lower()
+
+
+# =============================================================================
+# Tests for cost tracking functions
+# =============================================================================
+
+
+class TestCalculateCost:
+    """Tests for LLM cost calculation."""
+
+    def test_calculates_cost_for_known_model(self):
+        """Should calculate cost using known model pricing."""
+        # 1M input tokens at $3, 1M output tokens at $15
+        cost = calculate_cost(1_000_000, 1_000_000, "claude-sonnet-4-5-20250929")
+        assert cost == 18.0  # $3 + $15
+
+    def test_calculates_cost_for_small_usage(self):
+        """Should calculate cost for typical small usage."""
+        # 10K input, 5K output
+        cost = calculate_cost(10_000, 5_000, "claude-sonnet-4-5-20250929")
+        expected = (10_000 / 1_000_000) * 3.0 + (5_000 / 1_000_000) * 15.0
+        assert abs(cost - expected) < 0.0001
+
+    def test_uses_default_pricing_for_unknown_model(self):
+        """Should use default pricing for unknown models."""
+        cost = calculate_cost(1_000_000, 1_000_000, "unknown-model-xyz")
+        assert cost == 18.0  # Same as default
+
+    def test_zero_tokens_returns_zero_cost(self):
+        """Zero tokens should return zero cost."""
+        cost = calculate_cost(0, 0)
+        assert cost == 0.0
+
+
+class TestAgentTrackerCostTracking:
+    """Tests for AgentTracker cost tracking methods."""
+
+    def test_add_token_usage(self):
+        """Should accumulate token usage."""
+        tracker = AgentTracker()
+        tracker.add_token_usage(1000, 500)
+        tracker.add_token_usage(2000, 1000)
+        assert tracker.total_input_tokens == 3000
+        assert tracker.total_output_tokens == 1500
+
+    def test_get_total_cost(self):
+        """Should calculate total cost from accumulated tokens."""
+        tracker = AgentTracker()
+        tracker.add_token_usage(100_000, 50_000)
+        cost = tracker.get_total_cost()
+        expected = (100_000 / 1_000_000) * 3.0 + (50_000 / 1_000_000) * 15.0
+        assert abs(cost - expected) < 0.0001
+
+    def test_reset_token_tracking(self):
+        """Should reset token counts to zero."""
+        tracker = AgentTracker()
+        tracker.add_token_usage(5000, 2500)
+        tracker.reset_token_tracking()
+        assert tracker.total_input_tokens == 0
+        assert tracker.total_output_tokens == 0
+
+    def test_initial_token_counts_are_zero(self):
+        """New tracker should have zero token counts."""
+        tracker = AgentTracker()
+        assert tracker.total_input_tokens == 0
+        assert tracker.total_output_tokens == 0
+        assert tracker.get_total_cost() == 0.0
+
+
+class TestAnthropicPricing:
+    """Tests for pricing constants."""
+
+    def test_pricing_dict_has_required_keys(self):
+        """Pricing dict should have input and output keys."""
+        for model, prices in ANTHROPIC_PRICING.items():
+            assert "input" in prices, f"Model {model} missing input price"
+            assert "output" in prices, f"Model {model} missing output price"
+
+    def test_default_pricing_exists(self):
+        """Default pricing should exist for unknown models."""
+        assert "default" in ANTHROPIC_PRICING
+
+    def test_prices_are_positive(self):
+        """All prices should be positive numbers."""
+        for model, prices in ANTHROPIC_PRICING.items():
+            assert prices["input"] > 0, f"Model {model} has non-positive input price"
+            assert prices["output"] > 0, f"Model {model} has non-positive output price"

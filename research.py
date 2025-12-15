@@ -282,6 +282,45 @@ class SearchStatusDisplay:
 search_display = SearchStatusDisplay()
 
 
+# Anthropic pricing per 1M tokens (USD) - Claude Sonnet 4.5
+# https://www.anthropic.com/pricing
+ANTHROPIC_PRICING = {
+    "claude-sonnet-4-5-20250929": {
+        "input": 3.00,  # $3 per 1M input tokens
+        "output": 15.00,  # $15 per 1M output tokens
+    },
+    "claude-sonnet-4-20250514": {
+        "input": 3.00,
+        "output": 15.00,
+    },
+    # Default fallback for unknown models
+    "default": {
+        "input": 3.00,
+        "output": 15.00,
+    },
+}
+
+
+def calculate_cost(
+    input_tokens: int, output_tokens: int, model: str = "default"
+) -> float:
+    """
+    Calculate the cost in USD based on token usage.
+
+    Args:
+        input_tokens: Number of input tokens used
+        output_tokens: Number of output tokens used
+        model: Model name for pricing lookup
+
+    Returns:
+        Cost in USD
+    """
+    pricing = ANTHROPIC_PRICING.get(model, ANTHROPIC_PRICING["default"])
+    input_cost = (input_tokens / 1_000_000) * pricing["input"]
+    output_cost = (output_tokens / 1_000_000) * pricing["output"]
+    return input_cost + output_cost
+
+
 # Global state to track agent activity
 class AgentTracker:
     def __init__(self):
@@ -297,6 +336,26 @@ class AgentTracker:
         self.iteration_count = 0
         self.recursion_limit = 100
         self.report_triggered = False
+        # Token and cost tracking
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.model_name = "claude-sonnet-4-5-20250929"
+
+    def add_token_usage(self, input_tokens: int, output_tokens: int):
+        """Add token usage from an API call."""
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+
+    def get_total_cost(self) -> float:
+        """Calculate total cost based on accumulated token usage."""
+        return calculate_cost(
+            self.total_input_tokens, self.total_output_tokens, self.model_name
+        )
+
+    def reset_token_tracking(self):
+        """Reset token tracking for a new research session."""
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
 
 tracker = AgentTracker()
@@ -1175,6 +1234,11 @@ def run_quick_research(question: str, max_searches: int = 5):
     # Start timing
     start_time = time.time()
 
+    # Reset tracker for this session
+    tracker.reset_token_tracking()
+    tracker.searches_count = 0
+    tracker.cache_hits = 0
+
     # Clean up files from previous runs to avoid confusion
     ensure_research_folder()
     cleanup_files = ["question.txt", os.path.join(RESEARCH_FOLDER, "final_report.md")]
@@ -1224,6 +1288,13 @@ def run_quick_research(question: str, max_searches: int = 5):
         for iteration in range(max_iterations):
             # Call model
             response = model_with_tools.invoke(messages)
+
+            # Track token usage from response
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                usage = response.usage_metadata
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                tracker.add_token_usage(input_tokens, output_tokens)
 
             # Add response to conversation
             messages.append(
@@ -1333,6 +1404,16 @@ def run_quick_research(question: str, max_searches: int = 5):
         )
         stats_table.add_row("🚀 Mode", "Quick Research (Direct LLM)")
 
+        # Add token usage and cost statistics
+        if tracker.total_input_tokens > 0 or tracker.total_output_tokens > 0:
+            total_tokens = tracker.total_input_tokens + tracker.total_output_tokens
+            stats_table.add_row(
+                "📊 Tokens gebruikt",
+                f"{total_tokens:,} (in: {tracker.total_input_tokens:,}, out: {tracker.total_output_tokens:,})",
+            )
+            total_cost = tracker.get_total_cost()
+            stats_table.add_row("💰 Geschatte kosten", f"${total_cost:.4f}")
+
         console.print(
             Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green")
         )
@@ -1394,6 +1475,9 @@ def run_research(question: str, recursion_limit: int = 100):
     tracker.iteration_count = 0
     tracker.recursion_limit = recursion_limit
     tracker.report_triggered = False
+    tracker.reset_token_tracking()
+    tracker.searches_count = 0
+    tracker.cache_hits = 0
 
     # Clean up files from previous runs to avoid confusion
     ensure_research_folder()
@@ -1501,6 +1585,15 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                             if not isinstance(msgs, list):
                                 continue
                             for msg in msgs:
+                                # Track token usage from response metadata
+                                if (
+                                    hasattr(msg, "usage_metadata")
+                                    and msg.usage_metadata
+                                ):
+                                    usage = msg.usage_metadata
+                                    input_tokens = usage.get("input_tokens", 0)
+                                    output_tokens = usage.get("output_tokens", 0)
+                                    tracker.add_token_usage(input_tokens, output_tokens)
                                 if hasattr(msg, "content") and msg.content:
                                     # Check if it's a tool call
                                     if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -1534,6 +1627,23 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                                             console.print(f"[dim]{preview}[/dim]")
 
                     elif "research-agent" in node_name or "critique-agent" in node_name:
+                        # Track token usage from sub-agents
+                        if "messages" in node_data:
+                            sub_msgs = node_data["messages"]
+                            if hasattr(sub_msgs, "value"):
+                                sub_msgs = sub_msgs.value
+                            if isinstance(sub_msgs, list):
+                                for sub_msg in sub_msgs:
+                                    if (
+                                        hasattr(sub_msg, "usage_metadata")
+                                        and sub_msg.usage_metadata
+                                    ):
+                                        usage = sub_msg.usage_metadata
+                                        input_tokens = usage.get("input_tokens", 0)
+                                        output_tokens = usage.get("output_tokens", 0)
+                                        tracker.add_token_usage(
+                                            input_tokens, output_tokens
+                                        )
                         # Only show sub-agent activity in debug mode
                         if tracker.debug_mode:
                             agent_type = (
@@ -1607,6 +1717,16 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                 ]
             )
             stats_table.add_row("🌐 Gebruikte providers", provider_stats)
+
+        # Add token usage and cost statistics
+        if tracker.total_input_tokens > 0 or tracker.total_output_tokens > 0:
+            total_tokens = tracker.total_input_tokens + tracker.total_output_tokens
+            stats_table.add_row(
+                "📊 Tokens gebruikt",
+                f"{total_tokens:,} (in: {tracker.total_input_tokens:,}, out: {tracker.total_output_tokens:,})",
+            )
+            total_cost = tracker.get_total_cost()
+            stats_table.add_row("💰 Geschatte kosten", f"${total_cost:.4f}")
 
         console.print(
             Panel(stats_table, title="[bold]Statistieken[/bold]", border_style="green")

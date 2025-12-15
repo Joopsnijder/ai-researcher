@@ -53,7 +53,10 @@ def test_prompts():
     else:
         print("✓ FORBIDDEN AGENT STATEMENTS gevonden")
 
-    if "Now I'll compile" in research_instructions or "Now I will" not in research_instructions:
+    if (
+        "Now I'll compile" in research_instructions
+        or "Now I will" not in research_instructions
+    ):
         # Check dat het in de verboden lijst staat
         if '"Now I\'ll compile..."' not in research_instructions:
             errors.append("❌ Ontbreekt: 'Now I'll compile' in verboden lijst")
@@ -61,7 +64,10 @@ def test_prompts():
             print("✓ Agent statements in verboden lijst")
 
     # Test 4: Sub-research prompt
-    if "RAW FINDINGS" not in sub_research_prompt.upper() and "raw research findings" not in sub_research_prompt:
+    if (
+        "RAW FINDINGS" not in sub_research_prompt.upper()
+        and "raw research findings" not in sub_research_prompt
+    ):
         errors.append("❌ Sub-research prompt: ontbreekt 'raw findings' instructie")
     else:
         print("✓ Sub-research prompt: raw findings instructie aanwezig")
@@ -162,7 +168,7 @@ def scan_report(filepath: str):
 
     # Statistieken
     word_count = len(content.split())
-    print(f"\nStatistieken:")
+    print("\nStatistieken:")
     print(f"  - Woorden: {word_count:,}")
     print(f"  - Karakters: {len(content):,}")
     print(f"  - Regels: {total_lines}")
@@ -191,7 +197,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         report_ok = scan_report(sys.argv[1])
     else:
-        print("\nTip: python test_prompt_changes.py <rapport.md> om een rapport te scannen")
+        print(
+            "\nTip: python test_prompt_changes.py <rapport.md> om een rapport te scannen"
+        )
         report_ok = True
 
     # Exit code

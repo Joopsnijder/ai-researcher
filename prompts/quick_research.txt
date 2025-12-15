@@ -26,6 +26,12 @@ REPORT REQUIREMENTS:
 REPORT STRUCTURE:
 # [Clear Title Based on Question]
 
+| | |
+|---|---|
+| **Onderzoeksvraag** | [The original question] |
+| **Type** | AI-gegenereerd onderzoeksrapport (Quick Research) |
+| **Datum** | {{DATE}} |
+
 ## Overview
 [2-3 paragraph introduction setting context]
 

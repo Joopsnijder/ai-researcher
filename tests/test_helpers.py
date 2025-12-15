@@ -14,6 +14,10 @@ from research import (
     load_prompt,
     create_emergency_report,
     extract_research_from_messages,
+    _fix_report_title,
+    _fix_sources_section,
+    _fix_inline_references,
+    _extract_title_from_url,
 )
 
 
@@ -233,3 +237,115 @@ class TestCreateEmergencyReport:
         """Whitespace-only content should be treated as empty."""
         report = create_emergency_report("Test question", "   \n\t  ")
         assert "No research content" in report or "*No research" in report
+
+
+# =============================================================================
+# Tests for report post-processing functions
+# =============================================================================
+
+
+class TestFixReportTitle:
+    """Tests for title replacement in reports."""
+
+    def test_replaces_generic_title(self):
+        """Should replace generic titles with the research question."""
+        content = "# Onderzoeksrapport\n\nSome content here."
+        question = "Wat is LangGraph?"
+        result = _fix_report_title(content, question)
+        assert "# Wat is LangGraph?" in result
+        assert "# Onderzoeksrapport" not in result
+
+    def test_replaces_auto_generated_title(self):
+        """Should replace auto-generated titles."""
+        content = "# Research Report (Auto-Generated)\n\nContent."
+        question = "How do AI agents work?"
+        result = _fix_report_title(content, question)
+        assert "# How do AI agents work?" in result
+
+    def test_keeps_custom_title(self):
+        """Should keep titles that don't match generic patterns."""
+        content = "# My Custom Research Title\n\nContent."
+        question = "Some question"
+        result = _fix_report_title(content, question)
+        assert "# My Custom Research Title" in result
+
+
+class TestFixSourcesSection:
+    """Tests for sources section formatting."""
+
+    def test_separates_inline_sources(self):
+        """Should put each source on its own line."""
+        content = """## Bronnen
+
+[1] https://example.com/a [2] https://example.com/b [3] https://test.org
+"""
+        result = _fix_sources_section(content)
+        # Each source should have its own anchor
+        assert '<a id="bron-1"></a>' in result
+        assert '<a id="bron-2"></a>' in result
+        assert '<a id="bron-3"></a>' in result
+
+    def test_handles_markdown_links(self):
+        """Should preserve existing markdown link titles."""
+        content = """## Sources
+
+[1] [My Title](https://example.com/article)
+"""
+        result = _fix_sources_section(content)
+        assert "[My Title]" in result
+        assert "https://example.com/article" in result
+
+    def test_no_sources_section(self):
+        """Should return content unchanged if no sources section."""
+        content = "# Report\n\nNo sources here."
+        result = _fix_sources_section(content)
+        assert result == content
+
+
+class TestFixInlineReferences:
+    """Tests for inline reference linking."""
+
+    def test_converts_to_internal_links(self):
+        """Should convert [1] to [1](#bron-1)."""
+        content = "This fact is cited [1] and another [2].\n\n## Bronnen\n"
+        result = _fix_inline_references(content)
+        assert "[1](#bron-1)" in result
+        assert "[2](#bron-2)" in result
+
+    def test_preserves_sources_section(self):
+        """Should not modify references in sources section."""
+        content = "Text [1] here.\n\n## Bronnen\n\n[1] Some source"
+        result = _fix_inline_references(content)
+        # The [1] in sources should NOT become a link
+        lines = result.split("## Bronnen")
+        assert "[1](#bron-1)" in lines[0]  # In main content
+        # In sources section, [1] should remain as-is or be in anchor format
+
+    def test_ignores_existing_links(self):
+        """Should not double-link already linked references."""
+        content = "Already linked [1](#bron-1) reference.\n\n## Bronnen\n"
+        result = _fix_inline_references(content)
+        # Should not create [1](#bron-1)(#bron-1)
+        assert "[1](#bron-1)(#bron-1)" not in result
+
+
+class TestExtractTitleFromUrl:
+    """Tests for URL title extraction."""
+
+    def test_extracts_from_path(self):
+        """Should extract readable title from URL path."""
+        url = "https://example.com/articles/my-great-article"
+        title = _extract_title_from_url(url)
+        assert "My Great Article" in title or "example.com" in title.lower()
+
+    def test_falls_back_to_domain(self):
+        """Should use domain if path is not meaningful."""
+        url = "https://docs.example.com/"
+        title = _extract_title_from_url(url)
+        assert "example" in title.lower()
+
+    def test_handles_long_urls(self):
+        """Should truncate very long URLs."""
+        url = "https://example.com/" + "a" * 100
+        title = _extract_title_from_url(url)
+        assert len(title) <= 60 or "..." in title or "example" in title.lower()

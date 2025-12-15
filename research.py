@@ -985,10 +985,11 @@ def postprocess_report(filepath: str, question: str) -> bool:
     Post-process a research report to improve formatting.
 
     Improvements:
-    1. Replace generic titles with the actual research question
-    2. Fix source formatting: each source on its own line
-    3. Make source URLs clickable with proper titles
-    4. Convert inline [1] references to internal document links
+    1. Replace {{DATE}} placeholder with current date
+    2. Replace generic titles with the actual research question
+    3. Fix source formatting: each source on its own line
+    4. Make source URLs clickable with proper titles
+    5. Convert inline [1] references to internal document links
 
     Args:
         filepath: Path to the markdown report file
@@ -1003,13 +1004,16 @@ def postprocess_report(filepath: str, question: str) -> bool:
 
         original_content = content
 
-        # Step 1: Fix title - use research question instead of generic titles
+        # Step 1: Fix date - replace {{DATE}} placeholder with current date
+        content = _fix_report_date(content)
+
+        # Step 2: Fix title - use research question instead of generic titles
         content = _fix_report_title(content, question)
 
-        # Step 2: Fix sources section - proper formatting
+        # Step 3: Fix sources section - proper formatting
         content = _fix_sources_section(content)
 
-        # Step 3: Convert inline [1] references to internal links
+        # Step 4: Convert inline [1] references to internal links
         content = _fix_inline_references(content)
 
         # Only write if changes were made
@@ -1026,6 +1030,16 @@ def postprocess_report(filepath: str, question: str) -> bool:
     except Exception as e:
         console.print(f"[yellow]⚠️  Post-processing failed: {e}[/yellow]")
         return False
+
+
+def _fix_report_date(content: str) -> str:
+    """Replace {{DATE}} placeholder with the current date."""
+    from datetime import date
+
+    current_date = date.today().strftime("%Y-%m-%d")
+    # Replace the placeholder with actual date
+    content = content.replace("{{DATE}}", current_date)
+    return content
 
 
 def _fix_report_title(content: str, question: str) -> str:

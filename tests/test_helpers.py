@@ -15,6 +15,7 @@ from research import (
     create_emergency_report,
     extract_research_from_messages,
     _fix_report_title,
+    _fix_report_date,
     _fix_sources_section,
     _fix_inline_references,
     _extract_title_from_url,
@@ -271,6 +272,36 @@ class TestFixReportTitle:
         question = "Some question"
         result = _fix_report_title(content, question)
         assert "# My Custom Research Title" in result
+
+
+class TestFixReportDate:
+    """Tests for date placeholder replacement."""
+
+    def test_replaces_date_placeholder(self):
+        """Should replace {{DATE}} with current date."""
+        from datetime import date
+
+        content = "| **Datum** | {{DATE}} |"
+        result = _fix_report_date(content)
+        expected_date = date.today().strftime("%Y-%m-%d")
+        assert expected_date in result
+        assert "{{DATE}}" not in result
+
+    def test_replaces_multiple_placeholders(self):
+        """Should replace all {{DATE}} occurrences."""
+        from datetime import date
+
+        content = "Date: {{DATE}}\nUpdated: {{DATE}}"
+        result = _fix_report_date(content)
+        expected_date = date.today().strftime("%Y-%m-%d")
+        assert result.count(expected_date) == 2
+        assert "{{DATE}}" not in result
+
+    def test_no_placeholder_unchanged(self):
+        """Content without placeholder should remain unchanged."""
+        content = "| **Datum** | 2024-01-15 |"
+        result = _fix_report_date(content)
+        assert result == content
 
 
 class TestFixSourcesSection:

@@ -1,7 +1,7 @@
 """Display functions for updating the live UI."""
 
 from .console import console
-from .panels import create_todo_panel, create_combined_status_panel
+from .panels import create_todo_panel
 
 
 def display_todos(tracker, search_display, todos):
@@ -9,24 +9,22 @@ def display_todos(tracker, search_display, todos):
     # Store todos for combined display
     tracker.current_todos = todos
 
-    # If Live display is active, update it with combined panel
-    if tracker.live_display is not None:
-        combined = create_combined_status_panel(search_display, tracker, todos)
-        tracker.live_display.update(combined)
-    else:
-        # Fallback: print todo panel normally
+    # Notify callback for web interface
+    tracker.notify_update("todos")
+
+    # If no Live display, print panel normally (fallback)
+    if tracker.live_display is None:
         panel = create_todo_panel(todos)
         if panel:
             console.print(panel)
+    # Note: Live display auto-refreshes via LiveStatusRenderable
 
 
 def update_search_display(tracker, search_display):
     """Update the live display with current search status."""
-    if tracker.live_display is not None:
-        combined = create_combined_status_panel(
-            search_display, tracker, tracker.current_todos
-        )
-        tracker.live_display.update(combined)
+    # Notify callback for web interface
+    tracker.notify_update("search")
+    # Note: Live display auto-refreshes via LiveStatusRenderable
 
 
 def update_agent_status(tracker, search_display):
@@ -35,8 +33,6 @@ def update_agent_status(tracker, search_display):
     This function is called frequently during agent execution to show
     real-time progress even when no searches are happening.
     """
-    if tracker.live_display is not None:
-        combined = create_combined_status_panel(
-            search_display, tracker, tracker.current_todos
-        )
-        tracker.live_display.update(combined)
+    # Notify callback for web interface
+    tracker.notify_update("status")
+    # Note: Live display auto-refreshes via LiveStatusRenderable

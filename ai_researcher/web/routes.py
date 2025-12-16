@@ -209,18 +209,18 @@ def run_research_background(session: ResearchSession, recursion_limit: int):
         tracker.recursion_limit = recursion_limit
 
         # Create callback to push updates to SSE queue
-        def on_update(update_type: str, data: dict):
+        def on_update(update_type: str, tracker_data: dict):
             """Callback for research updates."""
-            # Update session state
-            session.iteration_count = tracker.iteration_count
-            session.searches_count = tracker.searches_count
-            session.cache_hits = getattr(tracker, "cache_hits", 0)
-            session.total_input_tokens = tracker.total_input_tokens
-            session.total_output_tokens = tracker.total_output_tokens
-            session.current_status = getattr(tracker, "current_status", "Processing...")
-            session.todos = getattr(tracker, "current_todos", []) or []
+            # Update session state from tracker data
+            session.iteration_count = tracker_data.get("iteration_count", 0)
+            session.searches_count = tracker_data.get("searches_count", 0)
+            session.cache_hits = tracker_data.get("cache_hits", 0)
+            session.total_input_tokens = tracker_data.get("total_input_tokens", 0)
+            session.total_output_tokens = tracker_data.get("total_output_tokens", 0)
+            session.current_status = tracker_data.get("current_status", "Processing...")
+            session.todos = tracker_data.get("current_todos", []) or []
 
-            # Push event to queue
+            # Push event to queue (thread-safe)
             try:
                 loop.call_soon_threadsafe(
                     session.event_queue.put_nowait,
@@ -236,13 +236,20 @@ def run_research_background(session: ResearchSession, recursion_limit: int):
         search_tool = HybridSearchTool(provider="multi-search")
         search_display = SearchStatusDisplay()
 
-        # Override search display to capture searches
+        # Override search display to capture searches for web UI
         original_add = search_display.add_search
 
         def capture_search(*args, **kwargs):
             original_add(*args, **kwargs)
             session.recent_searches = list(search_display.recent_searches)
-            on_update("search", {"searches": session.recent_searches})
+            # Manually push search update (in addition to tracker callback)
+            try:
+                loop.call_soon_threadsafe(
+                    session.event_queue.put_nowait,
+                    {"type": "search", "data": session.to_dict()},
+                )
+            except Exception:
+                pass
 
         search_display.add_search = capture_search
 

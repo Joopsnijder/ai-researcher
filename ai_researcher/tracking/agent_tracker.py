@@ -28,6 +28,30 @@ class AgentTracker:
         # Session timing and status
         self.start_time: float | None = None
         self.current_status: str = "Initialiseren..."
+        # Callback for web interface updates
+        self.on_update: callable | None = None
+
+    def notify_update(self, update_type: str = "status"):
+        """Notify listeners about state changes."""
+        if self.on_update is not None:
+            try:
+                self.on_update(update_type, self.to_dict())
+            except Exception:
+                pass  # Don't let callback errors break the main flow
+
+    def to_dict(self) -> dict:
+        """Convert tracker state to dictionary for serialization."""
+        return {
+            "iteration_count": self.iteration_count,
+            "recursion_limit": self.recursion_limit,
+            "searches_count": self.searches_count,
+            "cache_hits": self.cache_hits,
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "current_status": self.current_status,
+            "current_todos": self.current_todos,
+            "elapsed": self.get_elapsed_time(),
+        }
 
     def add_token_usage(self, input_tokens: int, output_tokens: int):
         """Add token usage from an API call."""

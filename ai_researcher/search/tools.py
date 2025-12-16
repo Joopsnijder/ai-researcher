@@ -7,7 +7,6 @@ from rich.table import Table
 from tavily import TavilyClient
 from multi_search_api import SmartSearchTool
 
-from ..config import suppress_output
 from ..ui.console import console
 
 
@@ -27,6 +26,7 @@ class HybridSearchTool:
                 serper_api_key=os.getenv("SERPER_API_KEY"),
                 brave_api_key=os.getenv("BRAVE_API_KEY"),
                 enable_cache=True,  # Thread-safe since multi-search-api v0.1.1
+                quiet=True,  # Suppress all logging output for clean UI
             )
 
     def normalize_multi_search_response(self, response):
@@ -56,10 +56,7 @@ class HybridSearchTool:
             return result
 
         elif self.provider == "multi-search":
-            with suppress_output():
-                response = self.multi_search.search(
-                    query=query, num_results=max_results
-                )
+            response = self.multi_search.search(query=query, num_results=max_results)
             normalized = self.normalize_multi_search_response(response)
             provider_name = normalized.get("_provider", "Unknown")
             self.provider_usage[provider_name] = (
@@ -71,10 +68,9 @@ class HybridSearchTool:
         elif self.provider == "auto":
             # Try multi-search first (free), fallback to Tavily
             try:
-                with suppress_output():
-                    response = self.multi_search.search(
-                        query=query, num_results=max_results
-                    )
+                response = self.multi_search.search(
+                    query=query, num_results=max_results
+                )
                 normalized = self.normalize_multi_search_response(response)
                 provider_name = normalized.get("_provider", "Unknown")
                 self.provider_usage[provider_name] = (

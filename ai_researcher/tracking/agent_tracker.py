@@ -27,7 +27,7 @@ class AgentTracker:
         self.model_name = "claude-sonnet-4-5-20250929"
         # Session timing and status
         self.start_time: float | None = None
-        self.current_status: str = "Initialiseren..."
+        self.current_status: str = "⏳ Initialiseren..."
         # Callback for web interface updates
         self.on_update: callable | None = None
 
@@ -72,7 +72,7 @@ class AgentTracker:
     def start_session(self):
         """Start timing for a research session."""
         self.start_time = time.time()
-        self.current_status = "Onderzoek starten..."
+        self.current_status = "🚀 Onderzoek starten..."
 
     def get_elapsed_time(self) -> str:
         """Return formatted elapsed time string."""

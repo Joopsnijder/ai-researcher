@@ -23,6 +23,44 @@ from ..templates import load_template, get_template_prompt, TemplateNotFoundErro
 from .helpers import should_trigger_early_report, create_finalize_instruction
 
 
+def get_dynamic_status(tool_name: str | None, tracker) -> str:
+    """Generate dynamic status based on current activity.
+
+    Args:
+        tool_name: Name of the tool being called, or None if just thinking
+        tracker: AgentTracker with current_todos
+
+    Returns:
+        Human-readable status string
+    """
+    # Tool-specific status messages
+    tool_statuses = {
+        "internet_search": "🔍 Zoeken op internet...",
+        "search": "🔍 Zoeken...",
+        "write_file": "📝 Bestand schrijven...",
+        "read_file": "📖 Bestand lezen...",
+        "write_todos": "📋 Taken bijwerken...",
+    }
+
+    if tool_name:
+        if tool_name in tool_statuses:
+            return tool_statuses[tool_name]
+        # Generic tool status
+        return f"🔧 {tool_name}..."
+
+    # Check current in-progress todo for context
+    if tracker.current_todos:
+        for todo in tracker.current_todos:
+            if todo.get("status") == "in_progress":
+                # Use activeForm if available, otherwise content
+                active_form = todo.get("activeForm") or todo.get("content", "")
+                if active_form:
+                    return f"⏳ {active_form}"
+
+    # Default thinking status
+    return "🤔 Agent analyseert..."
+
+
 # Load prompts
 research_instructions = load_prompt("deep_research")
 
@@ -296,13 +334,29 @@ Note in your TODO plan: Report language = {"Nederlands" if detected_lang == "nl"
                     # Track iteration count for early report trigger
                     tracker.iteration_count += 1
 
-                    # Update status based on node type (will be refined below)
-                    if node_name == "model":
-                        tracker.current_status = "Agent denkt..."
-                    elif "research-agent" in node_name:
-                        tracker.current_status = "Research sub-agent actief..."
+                    # Determine current tool being called (if any)
+                    current_tool = None
+                    if "messages" in node_data:
+                        msgs = node_data["messages"]
+                        if hasattr(msgs, "value"):
+                            msgs = msgs.value
+                        if isinstance(msgs, list):
+                            for msg in msgs:
+                                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                    # Get the first tool being called
+                                    current_tool = msg.tool_calls[0].get("name")
+                                    break
+
+                    # Update status based on node type and activity
+                    if "research-agent" in node_name:
+                        tracker.current_status = "🔬 Research sub-agent actief..."
                     elif "critique-agent" in node_name:
-                        tracker.current_status = "Critique sub-agent actief..."
+                        tracker.current_status = "📊 Critique sub-agent actief..."
+                    else:
+                        # Use dynamic status based on tool or current todo
+                        tracker.current_status = get_dynamic_status(
+                            current_tool, tracker
+                        )
 
                     # Update the live display with current status
                     update_agent_status(tracker, search_display)

@@ -17,6 +17,7 @@ from ..ui.console import console
 from ..ui.panels import LiveStatusRenderable
 from ..ui.display import display_todos, update_search_display, update_agent_status
 from ..report.finalization import ensure_report_exists, finalize_report
+from ..report.language import detect_language
 from ..prompts import load_prompt
 from .helpers import should_trigger_early_report, create_finalize_instruction
 
@@ -178,10 +179,24 @@ def run_research(
     # Track existing files before starting
     existing_files = set(os.listdir("."))
 
-    # Enhance question with planning reminder for better TODO structure
+    # Detect language of the question for report writing
+    detected_lang = detect_language(question)
+    lang_instruction = (
+        "BELANGRIJK: De onderzoeksvraag is in het NEDERLANDS gesteld. "
+        "Het eindrapport MOET volledig in het NEDERLANDS geschreven worden. "
+        "Alle secties, titels, en inhoud moeten Nederlands zijn."
+        if detected_lang == "nl"
+        else "IMPORTANT: The research question is in ENGLISH. "
+        "The final report MUST be written entirely in ENGLISH."
+    )
+
+    # Enhance question with language instruction and planning reminder
     enhanced_question = f"""{question}
 
-Remember to start by creating a detailed TODO plan using write_todos before beginning research."""
+{lang_instruction}
+
+Remember to start by creating a detailed TODO plan using write_todos before beginning research.
+Note in your TODO plan: Report language = {"Nederlands" if detected_lang == "nl" else "English"}."""
 
     # Print header
     console.print("\n")
@@ -279,6 +294,35 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                             tracker.current_todos = new_todos
                             # In-place update via Live display
                             display_todos(tracker, search_display, new_todos)
+
+                            # SAFEGUARD: Detect when all todos are completed but report doesn't exist
+                            # This catches the case where agent marks tasks complete without writing
+                            if new_todos and all(
+                                t.get("status") == "completed" for t in new_todos
+                            ):
+                                report_path = os.path.join(
+                                    RESEARCH_FOLDER, "final_report.md"
+                                )
+                                if not os.path.exists(report_path):
+                                    console.print(
+                                        "\n[bold yellow]⚠️ Alle taken zijn voltooid maar "
+                                        "final_report.md bestaat nog niet![/bold yellow]"
+                                    )
+                                    console.print(
+                                        "[yellow]De agent zou nu het rapport moeten "
+                                        "schrijven...[/yellow]\n"
+                                    )
+                                    # Inject a reminder message into the result
+                                    reminder_msg = {
+                                        "role": "system",
+                                        "content": (
+                                            "CRITICAL REMINDER: All todos are marked completed "
+                                            "but research/final_report.md does NOT exist yet! "
+                                            "You MUST call write_file to create the report NOW. "
+                                            "Do not stop until the file exists."
+                                        ),
+                                    }
+                                    result["messages"].append(reminder_msg)
 
                     if node_name == "model":
                         # Model is thinking

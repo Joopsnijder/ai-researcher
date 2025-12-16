@@ -14,8 +14,8 @@ from deepagents.backends import FilesystemBackend
 
 from ..config import RESEARCH_FOLDER, ensure_research_folder
 from ..ui.console import console
-from ..ui.panels import create_combined_status_panel
-from ..ui.display import display_todos, update_search_display
+from ..ui.panels import LiveStatusRenderable
+from ..ui.display import display_todos, update_search_display, update_agent_status
 from ..report.finalization import ensure_report_exists, finalize_report
 from ..prompts import load_prompt
 from .helpers import should_trigger_early_report, create_finalize_instruction
@@ -55,7 +55,9 @@ def _create_internet_search():
 
         # Use the search_tool - suppress noisy API error messages
         with suppress_output():
-            search_docs = search_tool.search(query, max_results=max_results, topic=topic)
+            search_docs = search_tool.search(
+                query, max_results=max_results, topic=topic
+            )
 
         # Extract search result info
         if isinstance(search_docs, dict) and "results" in search_docs:
@@ -153,8 +155,9 @@ def run_research(
     # Create agent with dependencies
     agent, internet_search = create_agent(search_tool, tracker, search_display)
 
-    # Start timing
+    # Start timing (both for final stats and live display)
     start_time = time.time()
+    tracker.start_session()
 
     # Reset tracker for new research session
     tracker.iteration_count = 0
@@ -195,10 +198,12 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
     # Reset search display for new research session
     search_display.recent_searches = []
 
-    # Start Live display for in-place status updates (search + todos)
-    # Use vertical_overflow="visible" to handle external print statements
+    # Start Live display for in-place status updates (agent status, search, todos)
+    # Use LiveStatusRenderable so elapsed time updates on each render cycle,
+    # even when no agent events are occurring (e.g., during sub-agent work)
+    live_renderable = LiveStatusRenderable(search_display, tracker)
     tracker.live_display = Live(
-        create_combined_status_panel(search_display),
+        live_renderable,
         console=console,
         refresh_per_second=4,
         transient=False,
@@ -227,8 +232,21 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                     # Track iteration count for early report trigger
                     tracker.iteration_count += 1
 
+                    # Update status based on node type (will be refined below)
+                    if node_name == "model":
+                        tracker.current_status = "Agent denkt..."
+                    elif "research-agent" in node_name:
+                        tracker.current_status = "Research sub-agent actief..."
+                    elif "critique-agent" in node_name:
+                        tracker.current_status = "Critique sub-agent actief..."
+
+                    # Update the live display with current status
+                    update_agent_status(tracker, search_display)
+
                     # Check if we need to trigger early report
                     if should_trigger_early_report(tracker):
+                        tracker.current_status = "⚠️ Limiet nadert - rapport afronden..."
+                        update_agent_status(tracker, search_display)
                         console.print(
                             "\n[bold yellow]>>> Iteratie-limiet nadert - "
                             "rapport schrijven wordt geforceerd[/bold yellow]\n"

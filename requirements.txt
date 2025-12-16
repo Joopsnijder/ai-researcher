@@ -1,6 +1,6 @@
 deepagents
 tavily-python
-multi-search-api
+multi-search-api>=0.1.10
 python-dotenv
 rich
 pyyaml

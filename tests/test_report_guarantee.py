@@ -24,10 +24,10 @@ def test_ensure_report_exists_with_no_report():
     import glob
     from research import ensure_report_exists
 
-    # Remove report and any test-related md files that could interfere
+    # Remove ALL .md files in research folder to avoid interference from previous runs
     cleanup_patterns = [
         FINAL_REPORT_PATH,
-        os.path.join(RESEARCH_FOLDER, "*question*.md"),
+        os.path.join(RESEARCH_FOLDER, "*.md"),  # ALL .md files in research/
         "*question*.md",
         "/tmp/*.md",
     ]
@@ -91,10 +91,10 @@ def test_ensure_report_exists_with_no_research():
     import glob
     from research import ensure_report_exists
 
-    # Remove report and any test-related md files that could interfere
+    # Remove ALL .md files in research folder to avoid interference from previous runs
     cleanup_patterns = [
         FINAL_REPORT_PATH,
-        os.path.join(RESEARCH_FOLDER, "*question*.md"),
+        os.path.join(RESEARCH_FOLDER, "*.md"),  # ALL .md files in research/
         "*question*.md",
         "/tmp/*.md",
     ]

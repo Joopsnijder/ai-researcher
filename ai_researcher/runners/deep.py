@@ -280,6 +280,35 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
                             # In-place update via Live display
                             display_todos(tracker, search_display, new_todos)
 
+                            # SAFEGUARD: Detect when all todos are completed but report doesn't exist
+                            # This catches the case where agent marks tasks complete without writing
+                            if new_todos and all(
+                                t.get("status") == "completed" for t in new_todos
+                            ):
+                                report_path = os.path.join(
+                                    RESEARCH_FOLDER, "final_report.md"
+                                )
+                                if not os.path.exists(report_path):
+                                    console.print(
+                                        "\n[bold yellow]⚠️ Alle taken zijn voltooid maar "
+                                        "final_report.md bestaat nog niet![/bold yellow]"
+                                    )
+                                    console.print(
+                                        "[yellow]De agent zou nu het rapport moeten "
+                                        "schrijven...[/yellow]\n"
+                                    )
+                                    # Inject a reminder message into the result
+                                    reminder_msg = {
+                                        "role": "system",
+                                        "content": (
+                                            "CRITICAL REMINDER: All todos are marked completed "
+                                            "but research/final_report.md does NOT exist yet! "
+                                            "You MUST call write_file to create the report NOW. "
+                                            "Do not stop until the file exists."
+                                        ),
+                                    }
+                                    result["messages"].append(reminder_msg)
+
                     if node_name == "model":
                         # Model is thinking
                         if "messages" in node_data:

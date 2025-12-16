@@ -96,6 +96,15 @@ Only edit the file once at a time (if you call this tool in parallel, there may 
 
 REMINDER: Before you finish your work, you MUST have created research/final_report.md. Do not mark your work as complete until this file exists!
 
+COMPLETION CHECKLIST - VERIFY BEFORE STOPPING:
+Before you consider your work complete, verify ALL of these:
+1. ✓ Did you actually call write_file to create research/final_report.md?
+2. ✓ Does the file contain a complete report (not just a plan or notes)?
+3. ✓ Is the report in the correct language (same as the question)?
+
+If you haven't written the report yet, DO NOT STOP. Call write_file NOW!
+The emergency fallback system will create a low-quality report if you fail to do this.
+
 ITERATION AWARENESS:
 The system monitors your iteration usage. If you receive an URGENT message about approaching the iteration limit:
 1. IMMEDIATELY stop all research activities

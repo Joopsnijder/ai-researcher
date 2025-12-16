@@ -14,7 +14,7 @@ from deepagents.backends import FilesystemBackend
 
 from ..config import RESEARCH_FOLDER, ensure_research_folder
 from ..ui.console import console
-from ..ui.panels import create_combined_status_panel
+from ..ui.panels import LiveStatusRenderable
 from ..ui.display import display_todos, update_search_display, update_agent_status
 from ..report.finalization import ensure_report_exists, finalize_report
 from ..prompts import load_prompt
@@ -199,9 +199,11 @@ Remember to start by creating a detailed TODO plan using write_todos before begi
     search_display.recent_searches = []
 
     # Start Live display for in-place status updates (agent status, search, todos)
-    # Use vertical_overflow="visible" to handle external print statements
+    # Use LiveStatusRenderable so elapsed time updates on each render cycle,
+    # even when no agent events are occurring (e.g., during sub-agent work)
+    live_renderable = LiveStatusRenderable(search_display, tracker)
     tracker.live_display = Live(
-        create_combined_status_panel(search_display, tracker),
+        live_renderable,
         console=console,
         refresh_per_second=4,
         transient=False,

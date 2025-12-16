@@ -2,7 +2,27 @@
 
 from rich.panel import Panel
 from rich.table import Table
-from rich.console import Group
+from rich.console import Group, RenderableType
+
+
+class LiveStatusRenderable:
+    """A renderable that refreshes on each render cycle.
+
+    This class creates a fresh panel on each render, ensuring the
+    elapsed time updates even when no agent events are occurring.
+    """
+
+    def __init__(self, search_display, tracker):
+        self.search_display = search_display
+        self.tracker = tracker
+
+    def __rich__(self) -> RenderableType:
+        """Called by Rich on each render cycle."""
+        return create_combined_status_panel(
+            self.search_display,
+            self.tracker,
+            self.tracker.current_todos if self.tracker else None,
+        )
 
 
 def create_progress_bar(

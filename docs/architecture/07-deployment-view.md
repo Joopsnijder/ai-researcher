@@ -2,42 +2,26 @@
 
 ## 7.1 Infrastructuur Overzicht
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Local Machine                             │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │ Terminal / Shell                                    │     │
-│  │                                                     │     │
-│  │   $ python research.py "onderzoeksvraag"           │     │
-│  │                                                     │     │
-│  └────────────────────────────────────────────────────┘     │
-│                          │                                   │
-│                          ▼                                   │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │ Python Runtime (3.10+)                              │     │
-│  │                                                     │     │
-│  │  ┌──────────────────────────────────────────────┐  │     │
-│  │  │ ai_researcher package                        │  │     │
-│  │  │                                              │  │     │
-│  │  │  - Reads: .env, prompts/                     │  │     │
-│  │  │  - Writes: research/*.md                     │  │     │
-│  │  └──────────────────────────────────────────────┘  │     │
-│  │                                                     │     │
-│  └────────────────────────────────────────────────────┘     │
-│                          │                                   │
-│                          │ HTTPS                             │
-└──────────────────────────┼───────────────────────────────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-   ┌────────────┐   ┌────────────┐   ┌────────────┐
-   │ Anthropic  │   │ Tavily     │   │ Multi-     │
-   │ API        │   │ Search API │   │ Search API │
-   │            │   │            │   │            │
-   │ Claude     │   │ Web search │   │ Aggregated │
-   │ inference  │   │ results    │   │ search     │
-   └────────────┘   └────────────┘   └────────────┘
+```mermaid
+flowchart TB
+    subgraph LocalMachine[Local Machine]
+        subgraph Terminal[Terminal / Shell]
+            Command["$ python research.py 'onderzoeksvraag'"]
+        end
+
+        subgraph PythonRuntime[Python Runtime 3.10+]
+            subgraph Package[ai_researcher package]
+                Reads["Reads: .env, prompts/"]
+                Writes["Writes: research/*.md"]
+            end
+        end
+
+        Terminal --> PythonRuntime
+    end
+
+    PythonRuntime -->|HTTPS| Anthropic[Anthropic API<br/>Claude inference]
+    PythonRuntime -->|HTTPS| Tavily[Tavily Search API<br/>Web search results]
+    PythonRuntime -->|HTTPS| MultiSearch[Multi-Search API<br/>Aggregated search]
 ```
 
 ## 7.2 Vereisten

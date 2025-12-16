@@ -2,28 +2,23 @@
 
 ## 3.1 Business Context
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Gebruiker                                │
-│                           │                                     │
-│                    Onderzoeksvraag                              │
-│                           ▼                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                   AI Researcher                          │   │
-│  │                                                          │   │
-│  │   ┌──────────┐    ┌──────────┐    ┌──────────┐         │   │
-│  │   │   CLI    │───▶│  Agents  │───▶│  Report  │         │   │
-│  │   └──────────┘    └──────────┘    └──────────┘         │   │
-│  │                         │                                │   │
-│  └─────────────────────────┼────────────────────────────────┘   │
-│                            │                                     │
-│              ┌─────────────┼─────────────┐                      │
-│              ▼             ▼             ▼                      │
-│       ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
-│       │ Anthropic│  │  Tavily  │  │Multi-    │                 │
-│       │   API    │  │  Search  │  │Search API│                 │
-│       └──────────┘  └──────────┘  └──────────┘                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    User[Gebruiker]
+
+    subgraph AIResearcher[AI Researcher]
+        CLI[CLI]
+        Agents[Agents]
+        Report[Report]
+        CLI --> Agents --> Report
+    end
+
+    User -->|Onderzoeksvraag| CLI
+    Report -->|Rapport| User
+
+    Agents --> Anthropic[Anthropic API]
+    Agents --> Tavily[Tavily Search]
+    Agents --> MultiSearch[Multi-Search API]
 ```
 
 ## 3.2 Externe Interfaces

@@ -160,23 +160,28 @@ Research executie modi.
 
 ## 5.3 Dependencies Diagram
 
-```
-                    cli.py
-                       │
-           ┌───────────┼───────────┐
-           ▼           ▼           ▼
-      runners/     config.py    prompts/
-           │
-     ┌─────┴─────┐
-     ▼           ▼
-  search/     report/
-     │           │
-     └─────┬─────┘
-           ▼
-      tracking/
-           │
-           ▼
-        ui/
+```mermaid
+flowchart TB
+    cli[cli.py]
+    config[config.py]
+    prompts[prompts/]
+    runners[runners/]
+    search[search/]
+    report[report/]
+    tracking[tracking/]
+    ui[ui/]
+
+    cli --> runners
+    cli --> config
+    cli --> prompts
+
+    runners --> search
+    runners --> report
+
+    search --> tracking
+    report --> tracking
+
+    tracking --> ui
 ```
 
 Afhankelijkheden vloeien naar beneden - geen circulaire imports.

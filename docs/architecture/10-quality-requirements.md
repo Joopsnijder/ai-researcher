@@ -2,17 +2,33 @@
 
 ## 10.1 Quality Tree
 
-```
-                        Kwaliteit
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-   Betrouwbaarheid    Bruikbaarheid      Onderhoudbaarheid
-        │                   │                   │
-   ┌────┴────┐        ┌────┴────┐        ┌────┴────┐
-   │         │        │         │        │         │
-Rapport   Error     CLI      Output   Modular  Testbaar
-Garantie  Handling  UX       Kwaliteit Code
+```mermaid
+flowchart TB
+    Quality[Kwaliteit]
+
+    Reliability[Betrouwbaarheid]
+    Usability[Bruikbaarheid]
+    Maintainability[Onderhoudbaarheid]
+
+    ReportGuarantee[Rapport Garantie]
+    ErrorHandling[Error Handling]
+    CLIUX[CLI UX]
+    OutputQuality[Output Kwaliteit]
+    ModularCode[Modular Code]
+    Testable[Testbaar]
+
+    Quality --> Reliability
+    Quality --> Usability
+    Quality --> Maintainability
+
+    Reliability --> ReportGuarantee
+    Reliability --> ErrorHandling
+
+    Usability --> CLIUX
+    Usability --> OutputQuality
+
+    Maintainability --> ModularCode
+    Maintainability --> Testable
 ```
 
 ## 10.2 Kwaliteitsscenario's

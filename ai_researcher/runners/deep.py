@@ -1,6 +1,7 @@
 """Deep research mode - agentic research with sub-agents."""
 
 import os
+import random
 import time
 from typing import Literal
 
@@ -57,8 +58,20 @@ def get_dynamic_status(tool_name: str | None, tracker) -> str:
                 if active_form:
                     return f"⏳ {active_form}"
 
-    # Default thinking status
-    return "🤔 Agent analyseert..."
+    # Rotating default thinking statuses for visual feedback
+    thinking_statuses = [
+        "🤔 Agent analyseert...",
+        "💭 Informatie verwerken...",
+        "🧠 Aan het nadenken...",
+        "📚 Bronnen evalueren...",
+        "🔬 Gegevens onderzoeken...",
+        "✨ Inzichten verzamelen...",
+        "🎯 Strategie bepalen...",
+        "📊 Data analyseren...",
+        "🔗 Verbanden leggen...",
+        "💡 Conclusies vormen...",
+    ]
+    return random.choice(thinking_statuses)
 
 
 # Load prompts

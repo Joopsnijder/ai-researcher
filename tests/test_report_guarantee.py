@@ -193,29 +193,45 @@ def test_report_guarantee_integration():
     """
     from research import run_research, HybridSearchTool
     import research
+    import glob
 
-    # Remove any existing report
+    # Remove any existing reports in the research folder
     if os.path.exists(FINAL_REPORT_PATH):
         os.remove(FINAL_REPORT_PATH)
+    for f in glob.glob(os.path.join(RESEARCH_FOLDER, "*.md")):
+        os.remove(f)
 
     # Initialize search tool
     research.search_tool = HybridSearchTool(provider="multi-search")
 
-    # Mock agent to return immediately without creating report
-    # Also mock rename_final_report to keep the file as research/final_report.md
-    with patch("research.agent.stream", return_value=[]):
-        with patch("research.rename_final_report", return_value=FINAL_REPORT_PATH):
-            # Run research with mock
-            run_research("Test question", recursion_limit=50)
+    # Create a mock agent that returns empty stream
+    mock_agent = Mock()
+    mock_agent.stream.return_value = []
 
-    # CRITICAL: Verify report exists (this is the guarantee!)
-    assert os.path.exists(FINAL_REPORT_PATH), (
+    # Mock the create_agent function to return our mock agent
+    with patch(
+        "ai_researcher.runners.deep.create_agent", return_value=(mock_agent, Mock())
+    ):
+        # Run research with mock
+        run_research("Test question", recursion_limit=50)
+
+    # CRITICAL: Verify a report exists (this is the guarantee!)
+    # After finalize_report, the file is renamed from final_report.md to a slug-based name
+    report_files = glob.glob(os.path.join(RESEARCH_FOLDER, "*.md"))
+    assert len(report_files) > 0, (
         "Report MUST exist after run_research, regardless of agent behavior"
     )
 
+    # Verify the report contains expected content
+    with open(report_files[0], "r") as f:
+        content = f.read()
+        assert "test" in content.lower() or "question" in content.lower(), (
+            "Report should contain relevant content"
+        )
+
     # Cleanup
-    if os.path.exists(FINAL_REPORT_PATH):
-        os.remove(FINAL_REPORT_PATH)
+    for f in report_files:
+        os.remove(f)
 
 
 def test_should_trigger_early_report_below_threshold():

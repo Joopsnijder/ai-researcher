@@ -227,20 +227,28 @@ De recursion limit bepaalt het maximum aantal agent iteraties:
 
 ```
 ai-researcher/
-├── research.py              # Main agent implementation
+├── research.py              # Entry point (backwards-compatible facade)
+├── ai_researcher/           # Main package
+│   ├── __init__.py          # Public API exports
+│   ├── cli.py               # CLI interface
+│   ├── config.py            # Constants en configuratie
+│   ├── prompts/             # Prompt templates
+│   ├── tracking/            # Cost tracking en AgentTracker
+│   ├── search/              # HybridSearchTool, SearchStatusDisplay
+│   ├── ui/                  # Rich terminal UI
+│   ├── report/              # Report generatie en post-processing
+│   └── runners/             # Quick en deep research modes
+├── tests/                   # Unit tests
 ├── export_pdf.py            # MD → PDF export script
 ├── requirements.txt         # Python dependencies
-├── .env                     # API keys + PDF_OUTPUT_DIR (niet in git!)
-├── .gitignore
-├── research/                # Output folder (niet in git!)
-│   └── {vraag}.md           # Generated research reports
-├── docs/
-│   ├── ai-research-agent-presentatie.md    # Marp presentatie
-│   └── template-presentation.md            # Marp template
-└── scripts/
-    ├── build-presentations.sh              # Build Marp slides
-    └── mermaid-to-images.js               # Mermaid converter
+├── .env                     # API keys (niet in git!)
+├── research/                # Output folder (gegenereerde rapporten)
+└── docs/
+    ├── architecture/        # arc42 architectuur documentatie
+    └── presentations/       # Marp presentaties
 ```
+
+> 📖 Zie [docs/architecture/](docs/architecture/) voor uitgebreide architectuur documentatie volgens de arc42 standaard.
 
 ## Troubleshooting
 

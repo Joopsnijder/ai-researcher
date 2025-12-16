@@ -153,6 +153,8 @@ only flowing prose. Highlight the most important insights.]
 
 [The rest of the report with well-structured sections]
 
+{{TEMPLATE_SECTIONS}}
+
 ## Sources / Bronnen
 
 [Numbered source list with markdown links]

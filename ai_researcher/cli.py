@@ -10,6 +10,37 @@ from .ui.console import console
 from .tracking import AgentTracker
 from .search import HybridSearchTool, SearchStatusDisplay
 from .runners import run_quick_research, run_research
+from .templates import get_template_info
+
+
+def display_templates():
+    """Display available templates in a nice format."""
+    from rich.table import Table
+
+    templates = get_template_info()
+
+    console.print("\n")
+    console.print(
+        Panel.fit(
+            "[bold cyan]Available Report Templates[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Template", style="green")
+    table.add_column("Description")
+
+    for t in templates:
+        table.add_row(t["name"], t["description"])
+
+    console.print(table)
+    console.print(
+        '\n[dim]Usage: python research.py -d -t <template> "Your question"[/dim]'
+    )
+    console.print(
+        '[dim]Example: python research.py -d -t swot "Analyse SWOT voor AI in healthcare"[/dim]\n'
+    )
 
 
 def parse_args():
@@ -54,6 +85,29 @@ Examples:
         "--debug",
         action="store_true",
         help="Enable debug mode",
+    )
+    parser.add_argument(
+        "-t",
+        "--template",
+        type=str,
+        default=None,
+        help="Report template to use (e.g., swot, comparison, market)",
+    )
+    parser.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="List available report templates and exit",
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Start web interface instead of CLI",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for web interface (default: 8000)",
     )
     return parser.parse_args()
 
@@ -178,6 +232,41 @@ def run_interactive():
             f"\n[green][/green] {provider_names[selected_provider]} geactiveerd\n"
         )
 
+    # Template selection (only for Deep Research mode)
+    selected_template = None
+    if not is_quick_mode:
+        templates = get_template_info()
+        console.print("[bold]Kies een rapport template:[/bold]\n")
+
+        # Build choice options
+        template_choices = ["1"]  # Default is always option 1
+        console.print(
+            "  [cyan]1.[/cyan] Standaard     [dim](flexibele structuur, agent bepaalt secties)[/dim]"
+        )
+
+        for i, t in enumerate(templates, 2):
+            if t["name"] != "default":
+                template_choices.append(str(i))
+                console.print(
+                    f"  [cyan]{i}.[/cyan] {t['name'].capitalize():12} [dim]({t['description']})[/dim]"
+                )
+
+        template_choice = Prompt.ask(
+            "\n[bold cyan]Template[/bold cyan]", choices=template_choices, default="1"
+        )
+
+        # Map choice to template name
+        if template_choice != "1":
+            idx = int(template_choice) - 2
+            non_default = [t for t in templates if t["name"] != "default"]
+            if 0 <= idx < len(non_default):
+                selected_template = non_default[idx]["name"]
+                console.print(
+                    f"\n[green][/green] Template '{selected_template}' geselecteerd\n"
+                )
+        else:
+            console.print("\n[green][/green] Standaard template geselecteerd\n")
+
     # Create tracker and search display
     tracker = AgentTracker()
     search_display = SearchStatusDisplay()
@@ -254,6 +343,7 @@ def run_interactive():
                 tracker=tracker,
                 search_tool=search_tool,
                 search_display=search_display,
+                template=selected_template,
             )
     else:
         console.print("\n[yellow]Onderzoek geannuleerd.[/yellow]\n")
@@ -276,13 +366,18 @@ def run_cli(args):
         "yes",
     )
 
+    # Prepare template info for header
+    template_info = ""
+    if args.template:
+        template_info = f" | Template: {args.template}"
+
     # Print header
     mode = "Deep Research" if args.deep else "Quick Research"
     console.print("\n")
     console.print(
         Panel.fit(
             f"[bold cyan]AI Research Agent[/bold cyan]\n"
-            f"[dim]{mode} | Provider: {args.provider} | Iterations: {iterations}[/dim]",
+            f"[dim]{mode} | Provider: {args.provider} | Iterations: {iterations}{template_info}[/dim]",
             border_style="cyan",
             padding=(1, 2),
         )
@@ -298,8 +393,13 @@ def run_cli(args):
             tracker=tracker,
             search_tool=search_tool,
             search_display=search_display,
+            template=args.template,
         )
     else:
+        if args.template:
+            console.print(
+                "[yellow]Waarschuwing: Templates worden alleen ondersteund in deep research mode (-d)[/yellow]\n"
+            )
         run_quick_research(
             args.question,
             max_searches=5,
@@ -312,6 +412,30 @@ def run_cli(args):
 def main():
     """Main entry point for the CLI."""
     args = parse_args()
+
+    # Handle --list-templates
+    if args.list_templates:
+        display_templates()
+        return
+
+    # Handle --web (start web interface)
+    if args.web:
+        from .web import run_server
+
+        console.print("\n")
+        console.print(
+            Panel.fit(
+                "[bold cyan]AI Research Agent - Web Interface[/bold cyan]\n"
+                f"[dim]Starting server on http://127.0.0.1:{args.port}[/dim]",
+                border_style="cyan",
+            )
+        )
+        console.print("\n[yellow]Open je browser en ga naar:[/yellow]")
+        console.print(f"[bold green]http://127.0.0.1:{args.port}[/bold green]\n")
+        console.print("[dim]Druk op Ctrl+C om de server te stoppen[/dim]\n")
+
+        run_server(host="127.0.0.1", port=args.port)
+        return
 
     if args.question:
         # CLI mode - run with provided question

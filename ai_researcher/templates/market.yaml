@@ -1,0 +1,45 @@
+name: market
+description: Market analysis with trends, competitors, and opportunities
+description_nl: Marktanalyse met trends, concurrenten en kansen
+
+sections:
+  - title: "Market Overview / Marktoverzicht"
+    title_nl: "Marktoverzicht"
+    title_en: "Market Overview"
+    prompt: "Provide an overview of the market including size, growth rate, and key segments. Include relevant statistics and data."
+    prompt_nl: "Geef een overzicht van de markt inclusief omvang, groeipercentage en belangrijkste segmenten. Vermeld relevante statistieken en data."
+
+  - title: "Market Trends / Markttrends"
+    title_nl: "Markttrends"
+    title_en: "Market Trends"
+    prompt: "Identify and analyze current market trends. What developments are shaping the market? What emerging patterns are visible?"
+    prompt_nl: "Identificeer en analyseer huidige markttrends. Welke ontwikkelingen bepalen de markt? Welke opkomende patronen zijn zichtbaar?"
+
+  - title: "Competitive Landscape / Concurrentielandschap"
+    title_nl: "Concurrentielandschap"
+    title_en: "Competitive Landscape"
+    prompt: "Analyze the key players in the market. Include market shares, positioning, and competitive advantages of major competitors."
+    prompt_nl: "Analyseer de belangrijkste spelers in de markt. Vermeld marktaandelen, positionering en concurrentievoordelen van grote concurrenten."
+
+  - title: "Target Audience / Doelgroep"
+    title_nl: "Doelgroep"
+    title_en: "Target Audience"
+    prompt: "Define and analyze the target audience. What are their needs, behaviors, and preferences?"
+    prompt_nl: "Definieer en analyseer de doelgroep. Wat zijn hun behoeften, gedrag en voorkeuren?"
+
+  - title: "Opportunities and Challenges / Kansen en Uitdagingen"
+    title_nl: "Kansen en Uitdagingen"
+    title_en: "Opportunities and Challenges"
+    prompt: "Identify market opportunities and potential challenges. What gaps exist? What barriers to entry are present?"
+    prompt_nl: "Identificeer marktkansen en mogelijke uitdagingen. Welke hiaten zijn er? Welke toetredingsbarrières zijn aanwezig?"
+
+  - title: "Strategic Implications / Strategische Implicaties"
+    title_nl: "Strategische Implicaties"
+    title_en: "Strategic Implications"
+    prompt: "Provide strategic recommendations based on the market analysis. How can opportunities be captured? How can challenges be addressed?"
+    prompt_nl: "Geef strategische aanbevelingen op basis van de marktanalyse. Hoe kunnen kansen worden benut? Hoe kunnen uitdagingen worden aangepakt?"
+
+notes: |
+  Market analysis template for business intelligence. Include quantitative
+  data where available (market size, growth rates, market shares). Use
+  frameworks like Porter's Five Forces where applicable.

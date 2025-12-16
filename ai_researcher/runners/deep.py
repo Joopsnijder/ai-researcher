@@ -19,6 +19,7 @@ from ..ui.display import display_todos, update_search_display, update_agent_stat
 from ..report.finalization import ensure_report_exists, finalize_report
 from ..report.language import detect_language
 from ..prompts import load_prompt
+from ..templates import load_template, get_template_prompt, TemplateNotFoundError
 from .helpers import should_trigger_early_report, create_finalize_instruction
 
 
@@ -106,7 +107,7 @@ _critique_sub_agent = {
     "system_prompt": load_prompt("critique_agent"),
 }
 
-# Create the global agent with FilesystemBackend
+# Create the global agent with FilesystemBackend (default template)
 _agent = create_deep_agent(
     tools=[_internet_search],
     system_prompt=research_instructions,
@@ -115,13 +116,43 @@ _agent = create_deep_agent(
 )
 
 
-def create_agent(search_tool, tracker, search_display):
+def _create_agent_with_template(template_name: str, language: str = "en"):
+    """Create an agent with a custom template."""
+    # Load the template
+    template = load_template(template_name)
+    template_prompt = get_template_prompt(template, language)
+
+    # Inject template sections into the research instructions
+    # Replace {{TEMPLATE_SECTIONS}} placeholder with actual sections
+    customized_instructions = research_instructions.replace(
+        "{{TEMPLATE_SECTIONS}}", template_prompt
+    )
+
+    # Create a new agent with the customized prompt
+    return create_deep_agent(
+        tools=[_internet_search],
+        system_prompt=customized_instructions,
+        subagents=[_critique_sub_agent, _research_sub_agent],
+        backend=FilesystemBackend(),
+    )
+
+
+def create_agent(
+    search_tool, tracker, search_display, template: str = None, language: str = "en"
+):
     """Initialize global agent state and return the agent."""
     # Update global state that internet_search uses
     _agent_state["tracker"] = tracker
     _agent_state["search_tool"] = search_tool
     _agent_state["search_display"] = search_display
 
+    # Use template-specific agent if template is specified
+    if template and template != "default":
+        agent = _create_agent_with_template(template, language)
+        return agent, _internet_search
+
+    # For default template, remove the placeholder from the prompt
+    # and use the global agent
     return _agent, _internet_search
 
 
@@ -131,6 +162,7 @@ def run_research(
     tracker=None,
     search_tool=None,
     search_display=None,
+    template: str = None,
 ):
     """
     Run the research agent with rich UI.
@@ -141,6 +173,7 @@ def run_research(
         tracker: AgentTracker instance (optional, creates new if None)
         search_tool: HybridSearchTool instance (optional)
         search_display: SearchStatusDisplay instance (optional)
+        template: Template name for report structure (optional)
     """
     from ..tracking import AgentTracker
     from ..search import HybridSearchTool, SearchStatusDisplay
@@ -153,8 +186,25 @@ def run_research(
     if search_display is None:
         search_display = SearchStatusDisplay()
 
-    # Create agent with dependencies
-    agent, internet_search = create_agent(search_tool, tracker, search_display)
+    # Detect language first (needed for template)
+    detected_lang = detect_language(question)
+
+    # Load and validate template if specified
+    template_info = None
+    if template:
+        try:
+            template_info = load_template(template)
+            console.print(
+                f"[dim]Template: {template_info.get('name', template)} - {template_info.get('description', '')}[/dim]"
+            )
+        except TemplateNotFoundError as e:
+            console.print(f"[bold red]Template error:[/bold red] {e}")
+            return None
+
+    # Create agent with dependencies (and template if specified)
+    agent, internet_search = create_agent(
+        search_tool, tracker, search_display, template=template, language=detected_lang
+    )
 
     # Start timing (both for final stats and live display)
     start_time = time.time()
@@ -179,8 +229,7 @@ def run_research(
     # Track existing files before starting
     existing_files = set(os.listdir("."))
 
-    # Detect language of the question for report writing
-    detected_lang = detect_language(question)
+    # Build language instruction (language was already detected above)
     lang_instruction = (
         "BELANGRIJK: De onderzoeksvraag is in het NEDERLANDS gesteld. "
         "Het eindrapport MOET volledig in het NEDERLANDS geschreven worden. "

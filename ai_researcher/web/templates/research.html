@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Onderzoek: {{ session.question[:50] }}...{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🔬 AI Research Agent</h1>
+    <p class="subtitle">{{ session.question }}</p>
+</div>
+
+<div id="research-container"
+     hx-ext="sse"
+     sse-connect="/research/{{ session.id }}/stream"
+     sse-swap="status"
+     hx-swap="none">
+
+    <!-- Status Card -->
+    <div class="card" id="status-card">
+        <h3>📊 Status</h3>
+        <div class="stats-grid">
+            <div class="stat">
+                <div class="stat-value" id="elapsed">--:--</div>
+                <div class="stat-label">Verstreken tijd</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value"><span id="iteration">0</span>/<span id="limit">{{ session.recursion_limit }}</span></div>
+                <div class="stat-label">Iteraties</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="searches">0</div>
+                <div class="stat-label">Zoekopdrachten</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="cost">$0.00</div>
+                <div class="stat-label">Kosten</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+            <div class="progress-bar">
+                <div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+            <small id="current-status" style="color: var(--muted-color);">🤖 Starten...</small>
+        </div>
+    </div>
+
+    <!-- Search Activity Card -->
+    <div class="card">
+        <h3>🔍 Zoekactiviteit</h3>
+        <ul class="search-list" id="search-list">
+            <li class="search-item">Wachten op eerste zoekopdracht...</li>
+        </ul>
+    </div>
+
+    <!-- Todos Card -->
+    <div class="card">
+        <h3>📋 Taken</h3>
+        <ul class="todo-list" id="todo-list">
+            <li class="todo-item">Wachten op taken...</li>
+        </ul>
+    </div>
+
+    <!-- Completion Card (hidden until done) -->
+    <div class="card hidden" id="completion-card">
+        <h3>✅ Onderzoek voltooid!</h3>
+        <div class="button-group">
+            <a href="/research/{{ session.id }}/report" class="contrast" role="button" id="download-btn">
+                📄 Download Rapport
+            </a>
+            <a href="/" role="button" class="secondary">
+                🔄 Nieuw Onderzoek
+            </a>
+        </div>
+        <div id="report-preview-container" style="margin-top: 1rem;">
+            <details>
+                <summary>Rapport preview</summary>
+                <pre class="report-preview" id="report-preview">Laden...</pre>
+            </details>
+        </div>
+    </div>
+
+    <!-- Error Card (hidden until error) -->
+    <div class="card hidden" id="error-card" style="border-color: var(--del-color);">
+        <h3 style="color: var(--del-color);">❌ Fout opgetreden</h3>
+        <p id="error-message"></p>
+        <a href="/" role="button" class="secondary">Terug naar start</a>
+    </div>
+
+    <!-- Stop Button -->
+    <div id="stop-container">
+        <button class="secondary" id="stop-btn" onclick="stopResearch()">
+            ⏹️ Stop Onderzoek
+        </button>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const researchId = "{{ session.id }}";
+let startTime = new Date();
+let elapsedInterval;
+
+// Start elapsed time counter
+function updateElapsed() {
+    const now = new Date();
+    const elapsed = Math.floor((now - startTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    document.getElementById('elapsed').textContent =
+        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+elapsedInterval = setInterval(updateElapsed, 1000);
+
+// Handle SSE events
+document.body.addEventListener('sse:status', function(e) {
+    const data = JSON.parse(e.detail.data);
+    updateUI(data);
+});
+
+document.body.addEventListener('sse:search', function(e) {
+    const data = JSON.parse(e.detail.data);
+    updateSearches(data.searches || []);
+});
+
+document.body.addEventListener('sse:complete', function(e) {
+    const data = JSON.parse(e.detail.data);
+    handleComplete(data);
+});
+
+document.body.addEventListener('sse:error', function(e) {
+    const data = JSON.parse(e.detail.data);
+    handleError(data.message);
+});
+
+function updateUI(data) {
+    // Update stats
+    document.getElementById('iteration').textContent = data.iteration_count || 0;
+    document.getElementById('limit').textContent = data.recursion_limit || 200;
+    document.getElementById('searches').textContent = data.searches_count || 0;
+
+    // Calculate cost
+    const inputCost = (data.total_input_tokens || 0) * 0.000003;
+    const outputCost = (data.total_output_tokens || 0) * 0.000015;
+    document.getElementById('cost').textContent = `$${(inputCost + outputCost).toFixed(2)}`;
+
+    // Update progress bar
+    const progress = ((data.iteration_count || 0) / (data.recursion_limit || 200)) * 100;
+    document.getElementById('progress-fill').style.width = `${Math.min(progress, 100)}%`;
+
+    // Update status
+    document.getElementById('current-status').textContent = `🤖 ${data.current_status || 'Processing...'}`;
+
+    // Update todos
+    if (data.todos && data.todos.length > 0) {
+        updateTodos(data.todos);
+    }
+
+    // Update searches
+    if (data.recent_searches && data.recent_searches.length > 0) {
+        updateSearches(data.recent_searches);
+    }
+
+    // Check for completion
+    if (data.status === 'completed') {
+        handleComplete(data);
+    } else if (data.status === 'failed') {
+        handleError(data.error || 'Onbekende fout');
+    }
+}
+
+function updateTodos(todos) {
+    const list = document.getElementById('todo-list');
+    list.innerHTML = todos.map(todo => {
+        let icon = '○';
+        let className = 'pending';
+        if (todo.status === 'completed') {
+            icon = '✓';
+            className = 'completed';
+        } else if (todo.status === 'in_progress') {
+            icon = '▶';
+            className = 'in_progress';
+        }
+        return `<li class="todo-item ${className}">
+            <span class="todo-icon">${icon}</span>
+            ${todo.content || todo.activeForm || ''}
+        </li>`;
+    }).join('');
+}
+
+function updateSearches(searches) {
+    const list = document.getElementById('search-list');
+    if (searches.length === 0) return;
+
+    list.innerHTML = searches.slice(-5).reverse().map(s => {
+        const cached = s.cached ? ' (cache)' : '';
+        return `<li class="search-item">
+            #${s.num || '?'} <span class="query">${s.query || ''}</span>
+            → <span class="results">${s.results_count || 0} resultaten${cached}</span>
+        </li>`;
+    }).join('');
+}
+
+function handleComplete(data) {
+    clearInterval(elapsedInterval);
+
+    // Update final elapsed time
+    if (data.elapsed_seconds) {
+        const minutes = Math.floor(data.elapsed_seconds / 60);
+        const seconds = Math.floor(data.elapsed_seconds % 60);
+        document.getElementById('elapsed').textContent =
+            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    // Show completion card
+    document.getElementById('completion-card').classList.remove('hidden');
+    document.getElementById('stop-container').classList.add('hidden');
+    document.getElementById('current-status').textContent = '✅ Voltooid!';
+
+    // Load report preview if available
+    if (data.report_path) {
+        fetch(`/research/${researchId}/report`)
+            .then(r => r.text())
+            .then(text => {
+                document.getElementById('report-preview').textContent = text.slice(0, 2000) + '...';
+            })
+            .catch(e => console.error('Could not load report preview:', e));
+    }
+}
+
+function handleError(message) {
+    clearInterval(elapsedInterval);
+
+    document.getElementById('error-card').classList.remove('hidden');
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('stop-container').classList.add('hidden');
+    document.getElementById('current-status').textContent = '❌ Fout';
+}
+
+async function stopResearch() {
+    const btn = document.getElementById('stop-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Stoppen...';
+
+    try {
+        const response = await fetch(`/research/${researchId}/stop`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('Stop error:', error);
+        }
+
+        // Reload page to show final state
+        window.location.reload();
+
+    } catch (error) {
+        console.error('Error stopping research:', error);
+        btn.disabled = false;
+        btn.textContent = '⏹️ Stop Onderzoek';
+    }
+}
+</script>
+{% endblock %}

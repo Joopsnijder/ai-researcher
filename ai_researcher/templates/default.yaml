@@ -1,0 +1,12 @@
+name: default
+description: Standard research report with executive summary and flexible sections
+description_nl: Standaard onderzoeksrapport met management samenvatting en flexibele secties
+
+# Default template uses the standard report structure from deep_research.txt
+# No mandatory sections - the agent determines the best structure based on the question
+sections: []
+
+notes: |
+  This is the default template. The report structure will be determined
+  automatically based on the research question. The agent will choose
+  appropriate sections for the specific topic.

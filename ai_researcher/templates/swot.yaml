@@ -1,0 +1,39 @@
+name: swot
+description: SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats)
+description_nl: SWOT Analyse (Sterktes, Zwaktes, Kansen, Bedreigingen)
+
+sections:
+  - title: "Strengths / Sterktes"
+    title_nl: "Sterktes"
+    title_en: "Strengths"
+    prompt: "Identify the internal strengths and advantages. What works well? What are the key capabilities and resources?"
+    prompt_nl: "Identificeer de interne sterktes en voordelen. Wat werkt goed? Wat zijn de belangrijkste capaciteiten en middelen?"
+
+  - title: "Weaknesses / Zwaktes"
+    title_nl: "Zwaktes"
+    title_en: "Weaknesses"
+    prompt: "Identify the internal weaknesses and limitations. What could be improved? What are the gaps or challenges?"
+    prompt_nl: "Identificeer de interne zwaktes en beperkingen. Wat kan verbeterd worden? Wat zijn de hiaten of uitdagingen?"
+
+  - title: "Opportunities / Kansen"
+    title_nl: "Kansen"
+    title_en: "Opportunities"
+    prompt: "Identify external opportunities. What trends or changes could be leveraged? What new possibilities exist?"
+    prompt_nl: "Identificeer externe kansen. Welke trends of veranderingen kunnen benut worden? Welke nieuwe mogelijkheden zijn er?"
+
+  - title: "Threats / Bedreigingen"
+    title_nl: "Bedreigingen"
+    title_en: "Threats"
+    prompt: "Identify external threats and risks. What obstacles exist? What could negatively impact success?"
+    prompt_nl: "Identificeer externe bedreigingen en risico's. Welke obstakels zijn er? Wat kan succes negatief beïnvloeden?"
+
+  - title: "Strategic Recommendations / Strategische Aanbevelingen"
+    title_nl: "Strategische Aanbevelingen"
+    title_en: "Strategic Recommendations"
+    prompt: "Provide actionable recommendations based on the SWOT analysis. How to leverage strengths and opportunities while addressing weaknesses and threats?"
+    prompt_nl: "Geef concrete aanbevelingen op basis van de SWOT-analyse. Hoe sterktes en kansen benutten en zwaktes en bedreigingen aanpakken?"
+
+notes: |
+  SWOT analysis template for strategic evaluation. Each section should contain
+  substantive analysis with specific examples and evidence from research.
+  The recommendations should directly connect to the SWOT findings.

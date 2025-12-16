@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}AI Research Agent{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>🔬 AI Research Agent</h1>
+    <p class="subtitle">Diepgaand onderzoek aangedreven door Claude & DeepAgents</p>
+</div>
+
+<form id="research-form" action="/research/start" method="post">
+    <div class="card">
+        <h3>Onderzoeksvraag</h3>
+        <textarea
+            name="question"
+            id="question"
+            placeholder="Wat wil je onderzoeken? Bijv: Wat zijn de nieuwste ontwikkelingen in quantum computing?"
+            rows="3"
+            required
+        ></textarea>
+    </div>
+
+    <div class="card">
+        <h3>Opties</h3>
+
+        <label for="template">
+            <strong>Rapport Template</strong>
+            <select name="template" id="template">
+                <option value="">Standaard (flexibele structuur)</option>
+                {% for t in templates %}
+                {% if t.name != 'default' %}
+                <option value="{{ t.name }}">{{ t.name|capitalize }} - {{ t.description }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </label>
+
+        <label for="recursion_limit">
+            <strong>Maximaal aantal iteraties</strong>
+            <input
+                type="number"
+                name="recursion_limit"
+                id="recursion_limit"
+                value="200"
+                min="50"
+                max="500"
+                step="50"
+            >
+            <small>Hoger = diepgaander onderzoek, maar duurt langer (50-500)</small>
+        </label>
+    </div>
+
+    <button type="submit" id="submit-btn">
+        🚀 Start Onderzoek
+    </button>
+</form>
+
+<div id="error-message" class="card hidden" style="border-color: var(--del-color);">
+    <p id="error-text" style="color: var(--del-color);"></p>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('research-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const submitBtn = document.getElementById('submit-btn');
+    const errorDiv = document.getElementById('error-message');
+    const errorText = document.getElementById('error-text');
+
+    // Disable button and show loading state
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Starten...';
+    submitBtn.setAttribute('aria-busy', 'true');
+    errorDiv.classList.add('hidden');
+
+    try {
+        const formData = new FormData(this);
+        const data = {
+            question: formData.get('question'),
+            template: formData.get('template') || null,
+            recursion_limit: parseInt(formData.get('recursion_limit')) || 200
+        };
+
+        const response = await fetch('/research/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Er is een fout opgetreden');
+        }
+
+        const result = await response.json();
+
+        // Redirect to research page
+        window.location.href = `/research/${result.research_id}`;
+
+    } catch (error) {
+        console.error('Error:', error);
+        errorText.textContent = error.message;
+        errorDiv.classList.remove('hidden');
+
+        // Reset button
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 Start Onderzoek';
+        submitBtn.removeAttribute('aria-busy');
+    }
+});
+</script>
+{% endblock %}

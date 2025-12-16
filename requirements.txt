@@ -3,3 +3,7 @@ tavily-python
 multi-search-api
 python-dotenv
 rich
+pyyaml
+fastapi
+uvicorn[standard]
+jinja2

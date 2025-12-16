@@ -1,0 +1,40 @@
+name: comparison
+description: Compare two or more options, products, or technologies
+description_nl: Vergelijk twee of meer opties, producten of technologieën
+
+sections:
+  - title: "Overview of Options / Overzicht Opties"
+    title_nl: "Overzicht van de Opties"
+    title_en: "Overview of Options"
+    prompt: "Provide a brief introduction to each option being compared. Include key characteristics and background."
+    prompt_nl: "Geef een korte introductie van elke optie die wordt vergeleken. Vermeld de belangrijkste kenmerken en achtergrond."
+
+  - title: "Comparison Criteria / Vergelijkingscriteria"
+    title_nl: "Vergelijkingscriteria"
+    title_en: "Comparison Criteria"
+    prompt: "Define the criteria used for comparison. Explain why these criteria are relevant for the decision."
+    prompt_nl: "Definieer de criteria die voor de vergelijking worden gebruikt. Leg uit waarom deze criteria relevant zijn voor de beslissing."
+
+  - title: "Comparison Table / Vergelijkingstabel"
+    title_nl: "Vergelijkingstabel"
+    title_en: "Comparison Table"
+    prompt: "Create a structured comparison table with all options and criteria. Use clear ratings or assessments per criterion."
+    prompt_nl: "Maak een gestructureerde vergelijkingstabel met alle opties en criteria. Gebruik duidelijke beoordelingen per criterium."
+
+  - title: "Detailed Analysis / Gedetailleerde Analyse"
+    title_nl: "Gedetailleerde Analyse"
+    title_en: "Detailed Analysis"
+    prompt: "Analyze each criterion in depth. Discuss the trade-offs and nuances for each option."
+    prompt_nl: "Analyseer elk criterium grondig. Bespreek de afwegingen en nuances voor elke optie."
+
+  - title: "Recommendation / Aanbeveling"
+    title_nl: "Aanbeveling"
+    title_en: "Recommendation"
+    prompt: "Provide a clear, substantiated recommendation. Explain which option is best for which use case or context."
+    prompt_nl: "Geef een duidelijke, onderbouwde aanbeveling. Leg uit welke optie het beste is voor welke use case of context."
+
+notes: |
+  Comparison template for evaluating multiple options. The comparison table
+  should use a consistent format (e.g., ratings, checkmarks, or qualitative
+  assessments). The recommendation should consider different scenarios where
+  each option might be preferred.

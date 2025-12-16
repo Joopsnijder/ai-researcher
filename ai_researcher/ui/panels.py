@@ -5,6 +5,70 @@ from rich.table import Table
 from rich.console import Group
 
 
+def create_progress_bar(
+    progress_pct: float, threshold_pct: float = 85, width: int = 20
+) -> str:
+    """Create a text-based progress bar with threshold indicator.
+
+    Args:
+        progress_pct: Current progress percentage (0-100)
+        threshold_pct: Threshold percentage to mark (default 85%)
+        width: Total width of the bar in characters
+    """
+    filled = int(width * progress_pct / 100)
+    threshold_pos = int(width * threshold_pct / 100)
+
+    bar = ""
+    for i in range(width):
+        if i < filled:
+            if i >= threshold_pos:
+                bar += "[red]█[/red]"
+            else:
+                bar += "[green]█[/green]"
+        elif i == threshold_pos:
+            bar += "[yellow]│[/yellow]"
+        else:
+            bar += "[dim]░[/dim]"
+
+    return f"[{bar}]"
+
+
+def create_agent_status_panel(tracker) -> Panel:
+    """Create agent status panel with live metrics."""
+    # Elapsed time
+    elapsed = tracker.get_elapsed_time()
+
+    # Iteration progress
+    if tracker.recursion_limit > 0:
+        progress_pct = (tracker.iteration_count / tracker.recursion_limit) * 100
+    else:
+        progress_pct = 0
+    bar = create_progress_bar(progress_pct, threshold_pct=85)
+
+    # Token counts (formatted in K)
+    input_k = tracker.total_input_tokens / 1000
+    output_k = tracker.total_output_tokens / 1000
+
+    # Cost
+    cost = tracker.get_total_cost()
+
+    # Build content lines
+    lines = [
+        f"[dim]⏱️  Verstreken:[/dim] [bold]{elapsed}[/bold]",
+        f"[dim]🔄 Iteratie:[/dim] [bold]{tracker.iteration_count}[/bold]/{tracker.recursion_limit} ({progress_pct:.0f}%)  {bar}",
+        f"[dim]📊 Tokens:[/dim] [bold]{input_k:.1f}K[/bold] in / [bold]{output_k:.1f}K[/bold] out",
+        f"[dim]💰 Kosten:[/dim] [bold]${cost:.2f}[/bold]",
+        f"[dim]🤖 Status:[/dim] [bold cyan]{tracker.current_status}[/bold cyan]",
+    ]
+
+    return Panel(
+        "\n".join(lines),
+        title="[bold cyan]Agent Status[/bold cyan]",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+
+
 def create_todo_panel(todos):
     """Create a todo panel (returns renderable, doesn't print)."""
     if not todos:
@@ -39,9 +103,13 @@ def create_todo_panel(todos):
     )
 
 
-def create_combined_status_panel(search_display, todos=None):
-    """Create a combined panel showing both search activity and todos."""
+def create_combined_status_panel(search_display, tracker=None, todos=None):
+    """Create a combined panel showing agent status, search activity, and todos."""
     panels = []
+
+    # Agent status panel (shown when session is active)
+    if tracker and tracker.start_time is not None:
+        panels.append(create_agent_status_panel(tracker))
 
     # Search activity panel (always show during research)
     if search_display.recent_searches:

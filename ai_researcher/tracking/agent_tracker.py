@@ -1,5 +1,7 @@
 """Agent state tracking for research sessions."""
 
+import time
+
 from .costs import calculate_cost
 
 
@@ -23,6 +25,9 @@ class AgentTracker:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.model_name = "claude-sonnet-4-5-20250929"
+        # Session timing and status
+        self.start_time: float | None = None
+        self.current_status: str = "Initialiseren..."
 
     def add_token_usage(self, input_tokens: int, output_tokens: int):
         """Add token usage from an API call."""
@@ -39,3 +44,17 @@ class AgentTracker:
         """Reset token tracking for a new research session."""
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+
+    def start_session(self):
+        """Start timing for a research session."""
+        self.start_time = time.time()
+        self.current_status = "Onderzoek starten..."
+
+    def get_elapsed_time(self) -> str:
+        """Return formatted elapsed time string."""
+        if self.start_time is None:
+            return "0m 0s"
+        elapsed = time.time() - self.start_time
+        minutes = int(elapsed // 60)
+        seconds = int(elapsed % 60)
+        return f"{minutes}m {seconds}s"

@@ -11,7 +11,7 @@ def display_todos(tracker, search_display, todos):
 
     # If Live display is active, update it with combined panel
     if tracker.live_display is not None:
-        combined = create_combined_status_panel(search_display, todos)
+        combined = create_combined_status_panel(search_display, tracker, todos)
         tracker.live_display.update(combined)
     else:
         # Fallback: print todo panel normally
@@ -23,5 +23,20 @@ def display_todos(tracker, search_display, todos):
 def update_search_display(tracker, search_display):
     """Update the live display with current search status."""
     if tracker.live_display is not None:
-        combined = create_combined_status_panel(search_display, tracker.current_todos)
+        combined = create_combined_status_panel(
+            search_display, tracker, tracker.current_todos
+        )
+        tracker.live_display.update(combined)
+
+
+def update_agent_status(tracker, search_display):
+    """Update the live display with current agent status.
+
+    This function is called frequently during agent execution to show
+    real-time progress even when no searches are happening.
+    """
+    if tracker.live_display is not None:
+        combined = create_combined_status_panel(
+            search_display, tracker, tracker.current_todos
+        )
         tracker.live_display.update(combined)

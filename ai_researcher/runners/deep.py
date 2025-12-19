@@ -159,11 +159,13 @@ _critique_sub_agent = {
 }
 
 # Create the global agent with FilesystemBackend (default template)
+# Use virtual_mode=True so paths like "/research/final_report.md" are resolved
+# relative to cwd, not as absolute filesystem paths
 _agent = create_deep_agent(
     tools=[_internet_search],
     system_prompt=research_instructions,
     subagents=[_critique_sub_agent, _research_sub_agent],
-    backend=FilesystemBackend(),
+    backend=FilesystemBackend(virtual_mode=True),
 )
 
 
@@ -180,11 +182,12 @@ def _create_agent_with_template(template_name: str, language: str = "en"):
     )
 
     # Create a new agent with the customized prompt
+    # Use virtual_mode=True so paths are resolved relative to cwd
     return create_deep_agent(
         tools=[_internet_search],
         system_prompt=customized_instructions,
         subagents=[_critique_sub_agent, _research_sub_agent],
-        backend=FilesystemBackend(),
+        backend=FilesystemBackend(virtual_mode=True),
     )
 
 

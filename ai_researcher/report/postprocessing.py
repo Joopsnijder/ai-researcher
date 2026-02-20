@@ -15,7 +15,7 @@ def postprocess_report(filepath: str, question: str) -> bool:
     1. Replace generic titles with the actual research question
     2. Fix source formatting: each source on its own line
     3. Make source URLs clickable with proper titles
-    4. Convert inline [1] references to internal document links
+    4. Convert inline [1] references to superscript internal links
     5. Replace {{DATE}} placeholder with current date
 
     Args:
@@ -204,9 +204,9 @@ def _extract_title_from_url(url: str) -> str:
 
 def _fix_inline_references(content: str) -> str:
     """
-    Convert inline [n] references to internal links that jump to the source.
+    Convert inline [n] references to superscript internal links.
 
-    [1] becomes [1](#bron-1)
+    [1] becomes <sup>[1](#bron-1)</sup>
     """
     # Find all inline references [n] that are NOT in the sources section
     # and NOT already links
@@ -237,7 +237,7 @@ def _fix_inline_references(content: str) -> str:
         if end_pos < len(main_content) and main_content[end_pos] == "(":
             return full_match
 
-        return f"[{num}](#bron-{num})"
+        return f"<sup>[{num}](#bron-{num})</sup>"
 
     # Pattern: [n] where n is 1-3 digits, not followed by ( or ]
     main_content = re.sub(r"\[(\d{1,3})\](?!\(|\])", replace_ref, main_content)

@@ -308,12 +308,12 @@ class TestFixSourcesSection:
 class TestFixInlineReferences:
     """Tests for inline reference linking."""
 
-    def test_converts_to_internal_links(self):
-        """Should convert [1] to [1](#bron-1)."""
+    def test_converts_to_superscript_links(self):
+        """Should convert [1] to <sup>[1](#bron-1)</sup>."""
         content = "This fact is cited [1] and another [2].\n\n## Bronnen\n"
         result = _fix_inline_references(content)
-        assert "[1](#bron-1)" in result
-        assert "[2](#bron-2)" in result
+        assert "<sup>[1](#bron-1)</sup>" in result
+        assert "<sup>[2](#bron-2)</sup>" in result
 
     def test_preserves_sources_section(self):
         """Should not modify references in sources section."""
@@ -321,15 +321,15 @@ class TestFixInlineReferences:
         result = _fix_inline_references(content)
         # The [1] in sources should NOT become a link
         lines = result.split("## Bronnen")
-        assert "[1](#bron-1)" in lines[0]  # In main content
+        assert "<sup>[1](#bron-1)</sup>" in lines[0]  # In main content
         # In sources section, [1] should remain as-is or be in anchor format
 
     def test_ignores_existing_links(self):
         """Should not double-link already linked references."""
-        content = "Already linked [1](#bron-1) reference.\n\n## Bronnen\n"
+        content = "Already linked <sup>[1](#bron-1)</sup> reference.\n\n## Bronnen\n"
         result = _fix_inline_references(content)
-        # Should not create [1](#bron-1)(#bron-1)
-        assert "[1](#bron-1)(#bron-1)" not in result
+        # Should not create nested superscript
+        assert "<sup><sup>" not in result
 
 
 class TestExtractTitleFromUrl:

@@ -1,20 +1,28 @@
 """Cost calculation for Anthropic API usage."""
 
-# Anthropic pricing per 1M tokens (USD) - Claude Sonnet 4.5
+# Anthropic pricing per 1M tokens (USD)
 # https://www.anthropic.com/pricing
 ANTHROPIC_PRICING = {
-    "claude-sonnet-4-5-20250929": {
+    "claude-opus-4-6": {
+        "input": 15.00,  # $15 per 1M input tokens
+        "output": 75.00,  # $75 per 1M output tokens
+    },
+    "claude-sonnet-4-6": {
         "input": 3.00,  # $3 per 1M input tokens
         "output": 15.00,  # $15 per 1M output tokens
+    },
+    "claude-sonnet-4-5-20250929": {
+        "input": 3.00,
+        "output": 15.00,
     },
     "claude-sonnet-4-20250514": {
         "input": 3.00,
         "output": 15.00,
     },
-    # Default fallback for unknown models
+    # Default fallback — uses Opus pricing as upper bound
     "default": {
-        "input": 3.00,
-        "output": 15.00,
+        "input": 15.00,
+        "output": 75.00,
     },
 }
 

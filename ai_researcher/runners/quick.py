@@ -137,9 +137,9 @@ def run_quick_research(
             return f"Error: {e}"
 
     try:
-        # Initialize Claude model
+        # Initialize Claude model (Opus 4.6 for direct report writing)
         model = ChatAnthropic(
-            model_name="claude-sonnet-4-5-20250929",
+            model_name="claude-opus-4-6",
             max_tokens=8000,
         )
 

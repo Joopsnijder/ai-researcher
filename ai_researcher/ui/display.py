@@ -1,50 +1,45 @@
 """Display functions for updating the live UI.
 
-The Live display uses LiveStatusRenderable which auto-refreshes via
-refresh_per_second=4. We do NOT call live_display.update() because that
-would replace the LiveStatusRenderable with a static Group, breaking
-the auto-refresh behavior.
-
-Instead, these functions just update the underlying data (tracker, search_display)
-and the LiveStatusRenderable picks up the changes on its next automatic refresh.
+Uses Live with auto_refresh=False to avoid Rich 14 cursor-tracking bugs.
+Each function explicitly calls live.update() with freshly built content.
 """
 
 from .console import console
-from .panels import create_todo_panel
+from .panels import create_todo_panel, create_combined_status_panel
+
+
+def _refresh_live(tracker, search_display):
+    """Rebuild and push the combined panel to the Live display."""
+    if tracker.live_display is not None:
+        combined = create_combined_status_panel(
+            search_display, tracker, tracker.current_todos
+        )
+        tracker.live_display.update(combined)
 
 
 def display_todos(tracker, search_display, todos):
-    """Display TODO list - updates data for Live display auto-refresh."""
-    # Store todos for combined display - LiveStatusRenderable will pick this up
+    """Display TODO list — pushes update to Live display."""
     tracker.current_todos = todos
-
-    # Notify callback for web interface
     tracker.notify_update("todos")
 
-    # If Live is not active, fall back to direct printing
-    if tracker.live_display is None:
+    if tracker.live_display is not None:
+        _refresh_live(tracker, search_display)
+    else:
         panel = create_todo_panel(todos)
         if panel:
             console.print(panel)
-    # Note: No update() call - LiveStatusRenderable auto-refreshes
 
 
 def update_search_display(tracker, search_display):
-    """Update search status - data is auto-refreshed by LiveStatusRenderable."""
-    # Notify callback for web interface
+    """Update search status — pushes update to Live display."""
     tracker.notify_update("search")
-    # Note: No update() call - LiveStatusRenderable auto-refreshes
-    # search_display.recent_searches is already updated by the caller
+    _refresh_live(tracker, search_display)
 
 
 def update_agent_status(tracker, search_display):
-    """Update agent status - data is auto-refreshed by LiveStatusRenderable.
+    """Update agent status — pushes update to Live display.
 
-    This function is called frequently during agent execution. The tracker's
-    current_status is updated by the caller before this function is called.
-    The LiveStatusRenderable picks up all data changes on its next refresh.
+    Called frequently during agent execution so elapsed time stays current.
     """
-    # Notify callback for web interface
     tracker.notify_update("status")
-    # Note: No update() call - LiveStatusRenderable auto-refreshes
-    # tracker.current_status is already updated by the caller
+    _refresh_live(tracker, search_display)

@@ -24,7 +24,7 @@ class AgentTracker:
         # Token and cost tracking
         self.total_input_tokens = 0
         self.total_output_tokens = 0
-        self.model_name = "claude-sonnet-4-5-20250929"
+        self.model_name = "claude-opus-4-6"
         # Session timing and status
         self.start_time: float | None = None
         self.current_status: str = "⏳ Initialiseren..."

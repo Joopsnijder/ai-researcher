@@ -100,7 +100,7 @@ Fout: "De Veranderende Rol van Leiderschap" """
             "\n[bold yellow]Genereren van gestructureerd rapport uit research...[/bold yellow]"
         )
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=12000,
             messages=[{"role": "user", "content": refinement_prompt}],
         )

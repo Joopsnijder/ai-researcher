@@ -2,27 +2,6 @@
 
 from rich.panel import Panel
 from rich.table import Table
-from rich.console import Group, RenderableType
-
-
-class LiveStatusRenderable:
-    """A renderable that refreshes on each render cycle.
-
-    This class creates a fresh panel on each render, ensuring the
-    elapsed time updates even when no agent events are occurring.
-    """
-
-    def __init__(self, search_display, tracker):
-        self.search_display = search_display
-        self.tracker = tracker
-
-    def __rich__(self) -> RenderableType:
-        """Called by Rich on each render cycle."""
-        return create_combined_status_panel(
-            self.search_display,
-            self.tracker,
-            self.tracker.current_todos if self.tracker else None,
-        )
 
 
 def create_progress_bar(
@@ -124,12 +103,19 @@ def create_todo_panel(todos):
 
 
 def create_combined_status_panel(search_display, tracker=None, todos=None):
-    """Create a combined panel showing agent status, search activity, and todos."""
-    panels = []
+    """Create a combined panel showing agent status, search activity, and todos.
+
+    Uses Table.grid() instead of Group to stack panels vertically.
+    Table.grid has more reliable height calculation in Rich's Live display,
+    avoiding cursor-tracking issues that cause cascading renders.
+    """
+    # Use Table.grid as container - fixes Rich 14 Live display height tracking
+    layout = Table.grid(padding=0)
+    layout.add_column()
 
     # Agent status panel (shown when session is active)
     if tracker and tracker.start_time is not None:
-        panels.append(create_agent_status_panel(tracker))
+        layout.add_row(create_agent_status_panel(tracker))
 
     # Search activity panel (always show during research)
     if search_display.recent_searches:
@@ -148,13 +134,12 @@ def create_combined_status_panel(search_display, tracker=None, todos=None):
         border_style="cyan",
         padding=(0, 1),
     )
-    panels.append(search_panel)
+    layout.add_row(search_panel)
 
     # Todo panel (if there are todos)
     if todos:
         todo_panel = create_todo_panel(todos)
         if todo_panel:
-            panels.append(todo_panel)
+            layout.add_row(todo_panel)
 
-    # Return a group of panels stacked vertically
-    return Group(*panels)
+    return layout

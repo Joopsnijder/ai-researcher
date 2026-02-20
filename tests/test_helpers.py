@@ -376,9 +376,9 @@ class TestCalculateCost:
         assert abs(cost - expected) < 0.0001
 
     def test_uses_default_pricing_for_unknown_model(self):
-        """Should use default pricing for unknown models."""
+        """Should use default pricing (Opus rates) for unknown models."""
         cost = calculate_cost(1_000_000, 1_000_000, "unknown-model-xyz")
-        assert cost == 18.0  # Same as default
+        assert cost == 90.0  # $15 input + $75 output (Opus upper bound)
 
     def test_zero_tokens_returns_zero_cost(self):
         """Zero tokens should return zero cost."""
@@ -398,11 +398,11 @@ class TestAgentTrackerCostTracking:
         assert tracker.total_output_tokens == 1500
 
     def test_get_total_cost(self):
-        """Should calculate total cost from accumulated tokens."""
+        """Should calculate total cost from accumulated tokens (Opus pricing)."""
         tracker = AgentTracker()
         tracker.add_token_usage(100_000, 50_000)
         cost = tracker.get_total_cost()
-        expected = (100_000 / 1_000_000) * 3.0 + (50_000 / 1_000_000) * 15.0
+        expected = (100_000 / 1_000_000) * 15.0 + (50_000 / 1_000_000) * 75.0
         assert abs(cost - expected) < 0.0001
 
     def test_reset_token_tracking(self):

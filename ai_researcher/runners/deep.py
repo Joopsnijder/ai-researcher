@@ -12,10 +12,11 @@ from rich.rule import Rule
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
+from langchain_anthropic import ChatAnthropic
 
 from ..config import RESEARCH_FOLDER, ensure_research_folder
 from ..ui.console import console
-from ..ui.panels import LiveStatusRenderable
+from ..ui.panels import create_combined_status_panel
 from ..ui.display import display_todos, update_search_display, update_agent_status
 from ..report.finalization import ensure_report_exists, finalize_report
 from ..report.language import detect_language
@@ -73,6 +74,10 @@ def get_dynamic_status(tool_name: str | None, tracker) -> str:
     ]
     return random.choice(thinking_statuses)
 
+
+# Model configuration: Opus 4.6 for main agent (final report), Sonnet 4.6 for sub-agents
+MAIN_MODEL = ChatAnthropic(model_name="claude-opus-4-6", max_tokens=20000)
+SUB_AGENT_MODEL = ChatAnthropic(model_name="claude-sonnet-4-6", max_tokens=20000)
 
 # Load prompts
 research_instructions = load_prompt("deep_research")
@@ -144,24 +149,28 @@ def _create_internet_search():
 # Create the global internet_search function
 _internet_search = _create_internet_search()
 
-# Create sub-agent configs
+# Create sub-agent configs (Sonnet 4.6 for sub-reports)
 _research_sub_agent = {
     "name": "research-agent",
     "description": "Used to research more in depth questions. Only give this researcher one topic at a time. Do not pass multiple sub questions to this researcher. Instead, you should break down a large topic into the necessary components, and then call multiple research agents in parallel, one for each sub question.",
     "system_prompt": load_prompt("research_agent"),
     "tools": [_internet_search],
+    "model": SUB_AGENT_MODEL,
 }
 
 _critique_sub_agent = {
     "name": "critique-agent",
     "description": "Used to critique the final report. Give this agent some information about how you want it to critique the report.",
     "system_prompt": load_prompt("critique_agent"),
+    "model": SUB_AGENT_MODEL,
 }
 
 # Create the global agent with FilesystemBackend (default template)
 # Use virtual_mode=True so paths like "/research/final_report.md" are resolved
 # relative to cwd, not as absolute filesystem paths
+# Main agent uses Opus 4.6 for planning and final report writing
 _agent = create_deep_agent(
+    model=MAIN_MODEL,
     tools=[_internet_search],
     system_prompt=research_instructions,
     subagents=[_critique_sub_agent, _research_sub_agent],
@@ -184,6 +193,7 @@ def _create_agent_with_template(template_name: str, language: str = "en"):
     # Create a new agent with the customized prompt
     # Use virtual_mode=True so paths are resolved relative to cwd
     return create_deep_agent(
+        model=MAIN_MODEL,
         tools=[_internet_search],
         system_prompt=customized_instructions,
         subagents=[_critique_sub_agent, _research_sub_agent],
@@ -317,15 +327,14 @@ Note in your TODO plan: Report language = {"Nederlands" if detected_lang == "nl"
     search_display.recent_searches = []
 
     # Start Live display for in-place status updates (agent status, search, todos)
-    # Use LiveStatusRenderable so elapsed time updates on each render cycle,
-    # even when no agent events are occurring (e.g., during sub-agent work)
-    live_renderable = LiveStatusRenderable(search_display, tracker)
+    # auto_refresh=False: we push updates explicitly via live.update() to avoid
+    # Rich 14 cursor-tracking bugs with auto-refresh in Terminal.app
+    initial_content = create_combined_status_panel(search_display, tracker)
     tracker.live_display = Live(
-        live_renderable,
+        initial_content,
         console=console,
-        refresh_per_second=4,
+        auto_refresh=False,
         transient=False,
-        vertical_overflow="visible",
     )
     tracker.live_display.start()
 

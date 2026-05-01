@@ -1,4 +1,4 @@
-deepagents
+deepagents>=0.5.5
 tavily-python
 multi-search-api>=0.1.10
 python-dotenv
